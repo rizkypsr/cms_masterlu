@@ -26,7 +26,7 @@ const editor = useEditor({
         StarterKit.configure({
             paragraph: {
                 HTMLAttributes: {
-                    style: 'margin-bottom: 1em;',
+                    style: 'margin: 0; line-height: 1.5;',
                 },
             },
         }),
@@ -44,14 +44,41 @@ const editor = useEditor({
         attributes: {
             class: 'prose prose-sm max-w-none focus:outline-none p-3',
         },
-        transformPastedHTML(html) {
-            // Convert line breaks to paragraphs
-            return html
-                .split(/\n\n+/)
-                .map(para => para.trim())
-                .filter(para => para.length > 0)
-                .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
-                .join('');
+        handlePaste: (view, event) => {
+            const text = event.clipboardData?.getData('text/plain');
+            if (!text) return false;
+
+            event.preventDefault();
+
+            // Split by lines and preserve empty lines
+            const lines = text.split('\n');
+            const { state } = view;
+            const { tr } = state;
+            const { $from } = state.selection;
+            
+            // Delete current selection
+            tr.deleteSelection();
+            
+            let pos = tr.selection.from;
+            
+            lines.forEach((line, index) => {
+                if (index > 0) {
+                    // Insert new paragraph for each line
+                    const paragraph = state.schema.nodes.paragraph.create();
+                    tr.insert(pos, paragraph);
+                    pos += paragraph.nodeSize;
+                }
+                
+                if (line.trim() !== '') {
+                    // Insert text if line is not empty
+                    const textNode = state.schema.text(line);
+                    tr.insert(pos, textNode);
+                    pos += line.length;
+                }
+            });
+            
+            view.dispatch(tr);
+            return true;
         },
     },
 });
@@ -204,5 +231,10 @@ const setHighlight = (color: string) => {
 
 .ProseMirror:focus {
     outline: none;
+}
+
+.ProseMirror p {
+    margin: 0;
+    min-height: 1.5em;
 }
 </style>
