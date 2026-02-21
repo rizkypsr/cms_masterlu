@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
 import { Icon } from '@iconify/vue';
-import { dashboard, logout } from '@/routes';
+import { Link } from '@inertiajs/vue3';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { dashboard, logout } from '@/routes';
 
 defineProps<{
     user: {
@@ -35,8 +35,18 @@ const navItems = [
             { label: 'Topik', href: '/audio/topik' },
         ],
     },
-    { label: 'Buku', href: '#' },
-    { label: 'Topik', href: '#' },
+    { label: 'Buku', href: '/book' },
+    {
+        label: 'Topik',
+        href: '#',
+        hasDropdown: true,
+        items: [
+            { label: 'Topik 1', href: '/topic' },
+            { label: 'Topik 2', href: '/topic2' },
+            { label: 'Topik 3', href: '/topic3' },
+        ],
+    },
+    { label: 'Playlist', href: '/community-playlist' },
     { label: 'Resep', href: '#' },
     { label: 'Komunitas', href: '#' },
     { label: 'Unduh', href: '#' },
@@ -54,8 +64,8 @@ const navItems = [
             { label: 'Agenda', href: '#' },
             { label: 'Kontak WA Admin', href: '#' },
             { label: 'Ganti Subtitle', href: '#' },
-            { label: 'Kata Kunci', href: '#' },
-            { label: 'Menu Mobile', href: '#' },
+            { label: 'Kata Kunci', href: '/keyword' },
+            { label: 'Menu', href: '/menu-mobile' },
             { label: 'Notif Schedule', href: '#' },
         ],
     },

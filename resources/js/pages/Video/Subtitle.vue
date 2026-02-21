@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { Icon } from '@iconify/vue';
-import DashboardLayout from '@/layouts/DashboardLayout.vue';
+import TimePicker from '@/components/TimePicker.vue';
+import TiptapEditor from '@/components/TiptapEditor.vue';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import DashboardLayout from '@/layouts/DashboardLayout.vue';
+
 
 interface Subtitle {
     id: number;
@@ -31,6 +34,17 @@ const props = defineProps<{
 
 const page = usePage();
 const user = page.props.auth?.user;
+
+// Format timestamp from milliseconds to HH:MM:SS
+const formatTimestamp = (milliseconds: string | number): string => {
+    const ms = typeof milliseconds === 'string' ? parseInt(milliseconds) : milliseconds;
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
 
 // Pagination
 const itemsPerPage = ref(10);
@@ -59,7 +73,7 @@ const showingTo = computed(() => Math.min(currentPage.value * itemsPerPage.value
 
 // Modal states
 const modalOpen = ref(false);
-const modalType = ref<'add' | 'edit' | 'delete' | 'deleteAll'>('add');
+const modalType = ref<'add' | 'edit' | 'delete' | 'deleteAll' | 'uploadSrt'>('add');
 const modalTitle = ref('');
 const selectedItem = ref<Subtitle | null>(null);
 
@@ -69,18 +83,27 @@ const form = useForm({
     description: '',
 });
 
-const openModal = (type: 'add' | 'edit' | 'delete' | 'deleteAll', item?: Subtitle) => {
+// Upload SRT form
+const uploadForm = useForm({
+    srt_file: null as File | null,
+});
+
+const openModal = (type: 'add' | 'edit' | 'delete' | 'deleteAll' | 'uploadSrt', item?: Subtitle) => {
     modalType.value = type;
     selectedItem.value = item || null;
 
     switch (type) {
+        case 'uploadSrt':
+            modalTitle.value = 'Upload Subtitle';
+            uploadForm.reset();
+            break;
         case 'add':
-            modalTitle.value = 'Tambah Data';
+            modalTitle.value = 'Form Subtitle Video';
             form.reset();
             break;
         case 'edit':
-            modalTitle.value = 'Edit Data';
-            form.timestamp = item?.timestamp || '';
+            modalTitle.value = 'Edit Subtitle';
+            form.timestamp = item?.timestamp ? formatTimestamp(item.timestamp) : '';
             form.description = item?.description || '';
             break;
         case 'delete':
@@ -126,10 +149,36 @@ const handleDeleteAll = () => {
     });
 };
 
+const handleFileChange = (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+        uploadForm.srt_file = target.files[0];
+    }
+};
+
+const handleUploadSrt = () => {
+    if (!uploadForm.srt_file) return;
+    
+    uploadForm.post(`/video/subtitle/${props.video.id}/upload-srt`, {
+        forceFormData: true,
+        onSuccess: () => {
+            modalOpen.value = false;
+            uploadForm.reset();
+        },
+        onError: (errors) => {
+            console.error('Upload errors:', errors);
+        },
+    });
+};
+
 const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages.value) {
         currentPage.value = page;
     }
+};
+
+const exportSrt = () => {
+    window.location.href = `/video/subtitle/${props.video.id}/export-srt`;
 };
 </script>
 
@@ -155,11 +204,19 @@ const goToPage = (page: number) => {
                             Hapus Semua Data
                         </Button>
                         <Button 
-                            @click="openModal('add')"
+                            @click="exportSrt"
+                            class="bg-[#f0ad4e] hover:bg-[#eea236]"
+                            size="sm"
+                        >
+                            <Icon icon="mdi:download" class="mr-1 h-4 w-4" />
+                            Export SRT
+                        </Button>
+                        <Button 
+                            @click="openModal('uploadSrt')"
                             class="bg-[#5bc0de] hover:bg-[#46b8da]"
                             size="sm"
                         >
-                            <Icon icon="mdi:plus" class="mr-1 h-4 w-4" />
+                            <Icon icon="mdi:upload" class="mr-1 h-4 w-4" />
                             Tambah Subtitle
                         </Button>
                         <Button 
@@ -235,8 +292,10 @@ const goToPage = (page: number) => {
                                         </button>
                                     </div>
                                 </td>
-                                <td class="px-4 py-2 text-sm text-gray-600">{{ subtitle.timestamp }}</td>
-                                <td class="px-4 py-2 text-sm text-gray-600 whitespace-pre-line">{{ subtitle.description }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ formatTimestamp(subtitle.timestamp) }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">
+                                    <div class="prose prose-sm max-w-none" v-html="subtitle.description"></div>
+                                </td>
                             </tr>
                             <tr v-if="paginatedSubtitles.length === 0">
                                 <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">
@@ -253,33 +312,56 @@ const goToPage = (page: number) => {
                         Showing {{ showingFrom }} to {{ showingTo }} of {{ filteredSubtitles.length }} entries
                     </div>
                     <div class="flex items-center gap-1">
-                        <Button 
-                            variant="outline" 
-                            size="sm"
+                        <button
+                            @click="goToPage(1)"
                             :disabled="currentPage === 1"
+                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Icon icon="mdi:chevron-double-left" class="h-4 w-4" />
+                        </button>
+                        <button
                             @click="goToPage(currentPage - 1)"
+                            :disabled="currentPage === 1"
+                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Previous
-                        </Button>
-                        <Button 
-                            v-for="page in totalPages" 
-                            :key="page"
-                            :variant="page === currentPage ? 'default' : 'outline'"
-                            size="sm"
-                            class="min-w-[32px]"
-                            :class="page === currentPage ? 'bg-[#337ab7] hover:bg-[#286090]' : ''"
-                            @click="goToPage(page)"
-                        >
-                            {{ page }}
-                        </Button>
-                        <Button 
-                            variant="outline" 
-                            size="sm"
-                            :disabled="currentPage === totalPages || totalPages === 0"
+                            <Icon icon="mdi:chevron-left" class="h-4 w-4" />
+                        </button>
+                        
+                        <template v-for="page in totalPages" :key="page">
+                            <button
+                                v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
+                                @click="goToPage(page)"
+                                :class="[
+                                    'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
+                                    page === currentPage 
+                                        ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
+                                        : 'border-gray-300 bg-white hover:bg-gray-50'
+                                ]"
+                            >
+                                {{ page }}
+                            </button>
+                            <span 
+                                v-else-if="page === currentPage - 2 || page === currentPage + 2"
+                                class="flex h-8 w-8 items-center justify-center text-gray-400"
+                            >
+                                ...
+                            </span>
+                        </template>
+
+                        <button
                             @click="goToPage(currentPage + 1)"
+                            :disabled="currentPage === totalPages"
+                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Next
-                        </Button>
+                            <Icon icon="mdi:chevron-right" class="h-4 w-4" />
+                        </button>
+                        <button
+                            @click="goToPage(totalPages)"
+                            :disabled="currentPage === totalPages"
+                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Icon icon="mdi:chevron-double-right" class="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
             </div>
@@ -297,17 +379,12 @@ const goToPage = (page: number) => {
                     <form v-if="modalType === 'add' || modalType === 'edit'" @submit.prevent="handleSubmit" class="space-y-4">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Waktu</label>
-                            <Input v-model="form.timestamp" placeholder="00:00:00" />
+                            <TimePicker v-model="form.timestamp" />
                         </div>
                         
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Deskripsi</label>
-                            <textarea
-                                v-model="form.description"
-                                rows="5"
-                                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                placeholder="Masukkan deskripsi subtitle"
-                            ></textarea>
+                            <TiptapEditor v-model="form.description" />
                         </div>
 
                         <div class="flex justify-end gap-2 pt-2">
@@ -347,6 +424,31 @@ const goToPage = (page: number) => {
                             </Button>
                         </div>
                     </div>
+
+                    <!-- Upload SRT Modal -->
+                    <form v-else-if="modalType === 'uploadSrt'" @submit.prevent="handleUploadSrt" class="space-y-4">
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700">SRT File</label>
+                            <input 
+                                type="file" 
+                                accept=".srt,.txt"
+                                @change="handleFileChange"
+                                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <p class="mt-1 text-xs text-gray-500">Upload an SRT subtitle file (max 10MB)</p>
+                        </div>
+
+                        <div class="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
+                            <Button 
+                                type="submit" 
+                                class="bg-[#f0ad4e] hover:bg-[#eea236]" 
+                                :disabled="uploadForm.processing || !uploadForm.srt_file"
+                            >
+                                Upload
+                            </Button>
+                        </div>
+                    </form>
                 </div>
             </DialogContent>
         </Dialog>

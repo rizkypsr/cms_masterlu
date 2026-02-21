@@ -1,17 +1,9 @@
 <script setup lang="ts">
+import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { Icon } from '@iconify/vue';
-import DashboardLayout from '@/layouts/DashboardLayout.vue';
-import { Card } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
 import {
     Command,
     CommandEmpty,
@@ -21,10 +13,18 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { cn } from '@/lib/utils';
 
 interface Video {
@@ -380,9 +380,14 @@ const selectGroup = (groupId: number) => {
             <div class="flex w-1/2 flex-col overflow-hidden">
                 <div class="flex items-center justify-between rounded-t bg-[#f0ad4e] px-4 py-2 text-white">
                     <span class="font-medium">Detail Video <span class="text-red-200">{{ videoCategory.title }}</span></span>
-                    <button class="flex h-6 w-6 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]">
-                        <Icon icon="mdi:close" class="h-4 w-4" />
-                    </button>
+                    <a 
+                        v-if="video"
+                        :href="`/video/subtitle/${video.id}`"
+                        class="flex h-6 w-6 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
+                        title="Subtitle"
+                    >
+                        <Icon icon="mdi:closed-caption" class="h-4 w-4" />
+                    </a>
                 </div>
                 
                 <div class="flex-1 overflow-y-auto bg-white p-4">

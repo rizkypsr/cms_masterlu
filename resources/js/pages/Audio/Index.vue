@@ -1,17 +1,10 @@
 <script setup lang="ts">
+import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { Icon } from '@iconify/vue';
-import DashboardLayout from '@/layouts/DashboardLayout.vue';
-import { Card } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import TimePicker from '@/components/TimePicker.vue';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
 import {
     Command,
     CommandEmpty,
@@ -21,10 +14,18 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { cn } from '@/lib/utils';
 
 interface Category {
@@ -32,13 +33,32 @@ interface Category {
     title: string;
     seq: number;
     parent_id: number | null;
+    parent?: Category | null;
     children?: Category[];
+}
+
+interface AudioItem {
+    id: number;
+    title: string;
+    url: string | null;
+    duration: string | null;
+    seq: number;
+}
+
+interface SubGroup {
+    id: number;
+    name: string;
+    seq: number;
+    have_child?: number;
+    audios?: AudioItem[];
 }
 
 const props = defineProps<{
     categories: Category[];
     lang: string;
     storeUrl: string;
+    subGroups?: SubGroup[];
+    selectedCategory?: Category | null;
 }>();
 
 const page = usePage();
@@ -47,6 +67,17 @@ const user = page.props.auth?.user;
 // Page title based on language
 const pageTitle = computed(() => props.lang === 'CH' ? 'Audio Mandarin - Daftar Isi' : 'Audio Indonesia - Topik');
 
+// Sub-group panel title
+const subGroupTitle = computed(() => {
+    if (props.selectedCategory?.parent) {
+        return `${props.selectedCategory.parent.title}/${props.selectedCategory.title}`;
+    }
+    return props.selectedCategory?.title || '';
+});
+
+// Base URL for navigation
+const baseUrl = computed(() => props.lang === 'CH' ? '/audio/daftar-isi' : '/audio/topik');
+
 // Modal states
 const modalOpen = ref(false);
 const modalType = ref<'view' | 'add' | 'edit' | 'delete'>('view');
@@ -54,9 +85,17 @@ const modalTitle = ref('');
 const selectedItem = ref<Category | null>(null);
 const selectedParent = ref<Category | null>(null);
 const isAddingSubCategory = ref(false);
+const modalContext = ref<'category' | 'subGroup'>('category');
+
+// Sub-Group modal states
+const selectedSubGroup = ref<SubGroup | AudioItem | null>(null);
+const selectedSubGroupParent = ref<SubGroup | null>(null);
+const isAddingAudioItem = ref(false);
+const subGroupModalType = ref<'group' | 'noChild' | 'editGroup' | 'editItem'>('group');
 
 // Combobox state
 const comboboxOpen = ref(false);
+const groupComboboxOpen = ref(false);
 
 // Form
 const form = useForm({
@@ -65,34 +104,72 @@ const form = useForm({
     seq: null as number | null,
 });
 
+// Sub-group form
+const subGroupForm = useForm({
+    title: '',
+    url: '',
+    duration: '',
+    seq: null as number | null,
+    group_id: null as number | null,
+    new_group_name: '',
+    have_child: 1 as number,
+});
+
 // Combobox options for "Urutan" - position based (1, 2, 3...)
 const urutanOptions = computed(() => {
     const options: { position: number; label: string }[] = [];
     
-    let items: Category[] = [];
-    
-    if (isAddingSubCategory.value && selectedParent.value) {
-        items = selectedParent.value.children || [];
-    } else if (modalType.value === 'edit' && selectedItem.value?.parent_id) {
-        const parent = props.categories.find(c => c.id === selectedItem.value?.parent_id);
-        items = parent?.children || [];
-    } else {
-        items = props.categories;
-    }
-    
-    items.forEach((cat, index) => {
-        const position = index + 1;
-        options.push({
-            position,
-            label: `${position} - ${cat.title}`,
+    if (modalContext.value === 'subGroup') {
+        // Sub-Group context
+        let items: (SubGroup | AudioItem)[] = [];
+        
+        if (isAddingAudioItem.value && selectedSubGroupParent.value) {
+            items = selectedSubGroupParent.value.audios || [];
+        } else {
+            items = props.subGroups || [];
+        }
+        
+        items.forEach((item, index) => {
+            const position = index + 1;
+            const label = 'name' in item ? item.name : item.title;
+            options.push({
+                position,
+                label: `${position} - ${label}`,
+            });
         });
-    });
-    
-    const lastPosition = items.length + 1;
-    options.push({
-        position: lastPosition,
-        label: `${lastPosition} - (Terakhir)`,
-    });
+        
+        const lastPosition = items.length + 1;
+        options.push({
+            position: lastPosition,
+            label: `${lastPosition} - (Terakhir)`,
+        });
+    } else {
+        // Category context
+        let items: Category[] = [];
+        
+        if (isAddingSubCategory.value && selectedParent.value) {
+            items = selectedParent.value.children || [];
+        } else if (modalType.value === 'edit' && selectedItem.value?.parent_id) {
+            const parent = props.categories.find(c => c.id === selectedItem.value?.parent_id);
+            items = parent?.children || [];
+        } else {
+            items = props.categories;
+        }
+        
+        items.forEach((cat, index) => {
+            const position = index + 1;
+            options.push({
+                position,
+                label: `${position} - ${cat.title}`,
+            });
+        });
+        
+        const lastPosition = items.length + 1;
+        options.push({
+            position: lastPosition,
+            label: `${lastPosition} - (Terakhir)`,
+        });
+    }
     
     return options;
 });
@@ -102,7 +179,15 @@ const selectedUrutanLabel = computed(() => {
     return option?.label || 'Pilih urutan...';
 });
 
+// Sub-group urutan label
+const selectedSubGroupUrutanLabel = computed(() => {
+    const option = urutanOptions.value.find(opt => opt.position === subGroupForm.seq);
+    return option?.label || 'Pilih urutan...';
+});
+
+// Category modal functions
 const openModal = (type: 'view' | 'add' | 'edit' | 'delete', item?: Category, isNewCategory = false) => {
+    modalContext.value = 'category';
     modalType.value = type;
     selectedItem.value = item || null;
     isAddingSubCategory.value = !isNewCategory && type === 'add';
@@ -143,6 +228,7 @@ const openModal = (type: 'view' | 'add' | 'edit' | 'delete', item?: Category, is
 };
 
 const handleSubmit = () => {
+    // Category submit
     if (modalType.value === 'add') {
         form.post(props.storeUrl, {
             onSuccess: () => {
@@ -151,7 +237,7 @@ const handleSubmit = () => {
             },
         });
     } else if (modalType.value === 'edit' && selectedItem.value) {
-        form.put(`/audio/category/${selectedItem.value.id}`, {
+        form.put(`/video/category/${selectedItem.value.id}`, {
             onSuccess: () => {
                 modalOpen.value = false;
                 form.reset();
@@ -162,7 +248,7 @@ const handleSubmit = () => {
 
 const handleDelete = () => {
     if (selectedItem.value) {
-        router.delete(`/audio/category/${selectedItem.value.id}`, {
+        router.delete(`/video/category/${selectedItem.value.id}`, {
             onSuccess: () => {
                 modalOpen.value = false;
             },
@@ -174,6 +260,163 @@ const selectUrutan = (position: number) => {
     form.seq = position;
     comboboxOpen.value = false;
 };
+
+const selectSubGroupUrutan = (position: number) => {
+    subGroupForm.seq = position;
+    comboboxOpen.value = false;
+};
+
+const selectChildCategory = (childId: number) => {
+    router.visit(`${baseUrl.value}/${childId}`);
+};
+
+// Sub-Group modal functions
+const openSubGroupModal = (type: 'add' | 'edit' | 'delete', formType?: 'group' | 'noChild', item?: SubGroup | AudioItem, parent?: SubGroup) => {
+    modalContext.value = 'subGroup';
+    modalType.value = type;
+    selectedSubGroup.value = item || null;
+    selectedSubGroupParent.value = parent || null;
+    
+    if (type === 'add') {
+        subGroupModalType.value = formType || 'group';
+        if (formType === 'group') {
+            modalTitle.value = 'Form Audio Group';
+            subGroupForm.reset();
+            subGroupForm.seq = (props.subGroups?.length || 0) + 1;
+            subGroupForm.have_child = 1; // Has children
+            isAddingAudioItem.value = false;
+        } else if (formType === 'noChild') {
+            subGroupForm.reset();
+            subGroupForm.new_group_name = '';
+            // If parent is provided, adding to existing group (Form Audio)
+            if (parent) {
+                modalTitle.value = 'Form Audio';
+                subGroupForm.group_id = parent.id;
+                subGroupForm.seq = (parent.audios?.length || 0) + 1;
+                subGroupForm.have_child = 1; // Has children
+                isAddingAudioItem.value = true;
+            } else {
+                // No parent - creating standalone audio (Form Audio No Child)
+                modalTitle.value = 'Form Audio No Child';
+                subGroupForm.seq = (props.subGroups?.length || 0) + 1;
+                subGroupForm.have_child = 0; // No children
+                isAddingAudioItem.value = false;
+            }
+        }
+    } else if (type === 'edit') {
+        if ('name' in item!) {
+            // Editing a sub-group
+            subGroupModalType.value = 'editGroup';
+            modalTitle.value = 'Edit Audio Group';
+            subGroupForm.title = item.name;
+            const pos = (props.subGroups?.findIndex(sg => sg.id === item.id) ?? -1) + 1;
+            subGroupForm.seq = pos || null;
+        } else {
+            // Editing an audio item
+            subGroupModalType.value = 'editItem';
+            modalTitle.value = 'Edit Audio';
+            subGroupForm.title = item!.title;
+            subGroupForm.url = item!.url || '';
+            subGroupForm.duration = item!.duration || '';
+            if (parent) {
+                const pos = (parent.audios?.findIndex(a => a.id === item!.id) ?? -1) + 1;
+                subGroupForm.seq = pos || null;
+            }
+        }
+    } else if (type === 'delete') {
+        modalTitle.value = 'Hapus';
+    }
+    
+    modalOpen.value = true;
+};
+
+const handleSubGroupSubmit = () => {
+    const categoryId = props.selectedCategory?.id;
+    if (!categoryId) return;
+    
+    const baseUrl = props.lang === 'CH' ? '/audio/daftar-isi' : '/audio/topik';
+    
+    if (modalType.value === 'add') {
+        if (subGroupModalType.value === 'group') {
+            // Create new group only
+            subGroupForm.transform(data => ({
+                new_group_name: data.title,
+                title: '',
+                seq: data.seq,
+                have_child: data.have_child,
+            })).post(`${baseUrl}/category/${categoryId}/sub-group`, {
+                onSuccess: () => {
+                    modalOpen.value = false;
+                    subGroupForm.reset();
+                },
+            });
+        } else if (subGroupModalType.value === 'noChild') {
+            // Check if adding to existing group or creating new group without child
+            if (selectedSubGroupParent.value) {
+                // Adding audio to existing group (Form Audio)
+                subGroupForm.transform(data => ({
+                    title: data.title,
+                    url: data.url,
+                    duration: data.duration,
+                    seq: data.seq,
+                    group_id: data.group_id,
+                })).post(`${baseUrl}/category/${categoryId}/sub-group`, {
+                    onSuccess: () => {
+                        modalOpen.value = false;
+                        subGroupForm.reset();
+                    },
+                });
+            } else {
+                // Creating new group without child audio (Form Audio No Child from header)
+                subGroupForm.transform(data => ({
+                    new_group_name: data.title, // Use title as group name
+                    title: '', // No audio item
+                    seq: data.seq,
+                    have_child: data.have_child, // Set to 0
+                })).post(`${baseUrl}/category/${categoryId}/sub-group`, {
+                    onSuccess: () => {
+                        modalOpen.value = false;
+                        subGroupForm.reset();
+                    },
+                });
+            }
+        }
+    } else if (modalType.value === 'edit') {
+        if (subGroupModalType.value === 'editGroup' && selectedSubGroup.value) {
+            // Update sub-group
+            subGroupForm.put(`/audio/sub-group/${selectedSubGroup.value.id}`, {
+                onSuccess: () => {
+                    modalOpen.value = false;
+                    subGroupForm.reset();
+                },
+            });
+        } else if (subGroupModalType.value === 'editItem' && selectedSubGroup.value) {
+            // Update audio item
+            subGroupForm.put(`/audio/audio-child/${selectedSubGroup.value.id}`, {
+                onSuccess: () => {
+                    modalOpen.value = false;
+                    subGroupForm.reset();
+                },
+            });
+        }
+    }
+};
+
+const handleSubGroupDelete = () => {
+    if (!selectedSubGroup.value) return;
+    
+    if ('name' in selectedSubGroup.value) {
+        // Delete sub-group
+        router.delete(`/audio/sub-group/${selectedSubGroup.value.id}`, {
+            onSuccess: () => modalOpen.value = false,
+        });
+    } else {
+        // Delete audio item
+        router.delete(`/audio/audio-child/${selectedSubGroup.value.id}`, {
+            onSuccess: () => modalOpen.value = false,
+        });
+    }
+};
 </script>
 
 <template>
@@ -183,91 +426,197 @@ const selectUrutan = (position: number) => {
         <div class="flex h-[calc(100vh-48px)] flex-col overflow-hidden bg-[#d3dce6] p-6">
             <h1 class="mb-6 text-xl text-gray-600">{{ pageTitle }}</h1>
 
-            <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden">
-                <!-- Header -->
-                <div class="flex items-center justify-between rounded-t bg-[#f0ad4e] px-4 py-2 text-white">
-                    <span class="font-medium">Kategori</span>
-                    <button
-                        @click="openModal('add', undefined, true)"
-                        class="flex h-6 w-6 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
-                    >
-                        <Icon icon="mdi:plus" class="h-4 w-4" />
-                    </button>
-                </div>
-
-                <!-- Category List -->
-                <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
-                    <template v-if="categories.length">
-                        <Card
-                            v-for="category in categories"
-                            :key="category.id"
-                            class="overflow-hidden rounded-none border-t-4 border-t-[#f0ad4e] shadow-sm"
+            <div class="flex flex-1 gap-6 overflow-hidden">
+                <!-- Left Panel: Category List -->
+                <div class="flex flex-col overflow-hidden" :class="selectedCategory ? 'w-1/2' : 'w-full max-w-3xl mx-auto'">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between rounded-t bg-[#f0ad4e] px-4 py-2 text-white">
+                        <span class="font-medium">Kategori</span>
+                        <button
+                            @click="openModal('add', undefined, true)"
+                            class="flex h-6 w-6 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
                         >
-                            <!-- Category Header -->
-                            <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-                                <span class="font-medium text-gray-700">{{ category.title }}</span>
-                                <div class="flex items-center gap-1">
-                                    <button
-                                        @click="openModal('view', category)"
-                                        class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
-                                    >
-                                        <Icon icon="mdi:navigation-variant" class="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        @click="openModal('add', category)"
-                                        class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
-                                    >
-                                        <Icon icon="mdi:plus" class="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        @click="openModal('edit', category)"
-                                        class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
-                                    >
-                                        <Icon icon="mdi:pencil" class="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        @click="openModal('delete', category)"
-                                        class="flex h-7 w-7 items-center justify-center rounded bg-[#d9534f] text-white hover:bg-[#d43f3a]"
-                                    >
-                                        <Icon icon="mdi:delete" class="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
+                            <Icon icon="mdi:plus" class="h-4 w-4" />
+                        </button>
+                    </div>
 
-                            <!-- Children -->
-                            <div v-if="category.children?.length">
-                                <div
-                                    v-for="child in category.children"
-                                    :key="child.id"
-                                    class="flex items-center justify-between border-b border-gray-100 px-4 py-2 last:border-b-0"
-                                >
-                                    <span class="text-sm text-gray-600">{{ child.title }}</span>
+                    <!-- Category List -->
+                    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+                        <template v-if="categories.length">
+                            <Card
+                                v-for="category in categories"
+                                :key="category.id"
+                                class="overflow-hidden rounded-none border-t-4 border-t-[#f0ad4e] shadow-sm"
+                            >
+                                <!-- Category Header -->
+                                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                                    <span class="font-medium text-gray-700">{{ category.title }}</span>
                                     <div class="flex items-center gap-1">
                                         <button
-                                            @click="openModal('view', child)"
+                                            @click="openModal('view', category)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
                                         >
                                             <Icon icon="mdi:navigation-variant" class="h-4 w-4" />
                                         </button>
                                         <button
-                                            @click="openModal('edit', child)"
+                                            @click="openModal('add', category)"
+                                            class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
+                                        >
+                                            <Icon icon="mdi:plus" class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            @click="openModal('edit', category)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
                                         >
                                             <Icon icon="mdi:pencil" class="h-4 w-4" />
                                         </button>
                                         <button
-                                            @click="openModal('delete', child)"
+                                            @click="openModal('delete', category)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#d9534f] text-white hover:bg-[#d43f3a]"
                                         >
                                             <Icon icon="mdi:delete" class="h-4 w-4" />
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-                        </Card>
-                    </template>
-                    <div v-else class="py-8 text-center text-gray-500">
-                        Belum ada kategori
+
+                                <!-- Children -->
+                                <div v-if="category.children?.length">
+                                    <div
+                                        v-for="child in category.children"
+                                        :key="child.id"
+                                        class="flex items-center justify-between border-b border-gray-100 px-4 py-2 last:border-b-0 cursor-pointer hover:bg-gray-50"
+                                        :class="{ 'bg-blue-50': selectedCategory?.id === child.id }"
+                                        @click="selectChildCategory(child.id)"
+                                    >
+                                        <span class="text-sm text-gray-600">{{ child.title }}</span>
+                                        <div class="flex items-center gap-1" @click.stop>
+                                            <button
+                                                @click="openModal('view', child)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
+                                            >
+                                                <Icon icon="mdi:navigation-variant" class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                @click="openModal('edit', child)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
+                                            >
+                                                <Icon icon="mdi:pencil" class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                @click="openModal('delete', child)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#d9534f] text-white hover:bg-[#d43f3a]"
+                                            >
+                                                <Icon icon="mdi:delete" class="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        </template>
+                        <div v-else class="py-8 text-center text-gray-500">
+                            Belum ada kategori
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Sub-Group List (shown when child category is selected) -->
+                <div v-if="selectedCategory" class="flex w-1/2 flex-col overflow-hidden">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between rounded-t bg-[#f0ad4e] px-4 py-2 text-white">
+                        <span class="font-medium">{{ subGroupTitle }}</span>
+                        <div class="flex items-center gap-2">
+                            <button
+                                @click="openSubGroupModal('add', 'group')"
+                                class="flex h-6 w-6 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
+                                title="Form Audio Group"
+                            >
+                                <Icon icon="mdi:plus" class="h-4 w-4" />
+                            </button>
+                            <button
+                                @click="openSubGroupModal('add', 'noChild')"
+                                class="flex h-6 w-6 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
+                                title="Form Audio No Child"
+                            >
+                                <Icon icon="mdi:plus" class="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sub-Group List -->
+                    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+                        <template v-if="subGroups?.length">
+                            <Card
+                                v-for="sg in subGroups"
+                                :key="sg.id"
+                                class="overflow-hidden rounded-none border-t-4 border-t-[#f0ad4e] shadow-sm"
+                            >
+                                <!-- Sub-Group Header -->
+                                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                                    <span class="font-medium text-gray-700">{{ sg.name }}</span>
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            v-if="sg.have_child !== 0"
+                                            @click="openSubGroupModal('add', 'noChild', undefined, sg)"
+                                            class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
+                                            title="Tambah Audio"
+                                        >
+                                            <Icon icon="mdi:plus" class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            @click="openSubGroupModal('edit', undefined, sg)"
+                                            class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
+                                            title="Edit Group"
+                                        >
+                                            <Icon icon="mdi:pencil" class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            @click="openSubGroupModal('delete', undefined, sg)"
+                                            class="flex h-7 w-7 items-center justify-center rounded bg-[#d9534f] text-white hover:bg-[#d43f3a]"
+                                            title="Hapus Group"
+                                        >
+                                            <Icon icon="mdi:delete" class="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Audio Items -->
+                                <div v-if="sg.audios?.length">
+                                    <div
+                                        v-for="audio in sg.audios"
+                                        :key="audio.id"
+                                        class="flex items-center justify-between border-b border-gray-100 px-4 py-2 last:border-b-0"
+                                    >
+                                        <span class="text-sm text-gray-600">{{ audio.title }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button
+                                                @click="router.visit(`/audio/subtitle/${audio.id}`)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
+                                                title="Subtitle"
+                                            >
+                                                <Icon icon="mdi:closed-caption" class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                @click="openSubGroupModal('edit', undefined, audio, sg)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
+                                                title="Edit Audio"
+                                            >
+                                                <Icon icon="mdi:pencil" class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                @click="openSubGroupModal('delete', undefined, audio)"
+                                                class="flex h-7 w-7 items-center justify-center rounded bg-[#d9534f] text-white hover:bg-[#d43f3a]"
+                                                title="Hapus Audio"
+                                            >
+                                                <Icon icon="mdi:delete" class="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        </template>
+                        <div v-else class="py-8 text-center text-gray-500">
+                            Belum ada audio
+                        </div>
                     </div>
                 </div>
             </div>
@@ -288,8 +637,8 @@ const selectUrutan = (position: number) => {
                         </p>
                     </div>
 
-                    <!-- Add Modal -->
-                    <form v-else-if="modalType === 'add'" @submit.prevent="handleSubmit" class="space-y-4">
+                    <!-- Category Add/Edit Modal -->
+                    <form v-else-if="(modalType === 'add' || modalType === 'edit') && modalContext === 'category'" @submit.prevent="handleSubmit" class="space-y-4">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Nama Kategori</label>
                             <Input v-model="form.title" placeholder="Masukkan nama kategori" />
@@ -336,19 +685,39 @@ const selectUrutan = (position: number) => {
 
                         <div class="flex justify-end gap-2 pt-2">
                             <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button type="submit" class="bg-[#5cb85c] hover:bg-[#4cae4c]" :disabled="form.processing">
-                                Simpan
+                            <Button 
+                                type="submit" 
+                                :class="modalType === 'add' ? 'bg-[#5cb85c] hover:bg-[#4cae4c]' : 'bg-[#f0ad4e] hover:bg-[#eea236]'" 
+                                :disabled="form.processing"
+                            >
+                                {{ modalType === 'add' ? 'Simpan' : 'Update' }}
                             </Button>
                         </div>
                     </form>
 
-                    <!-- Edit Modal -->
-                    <form v-else-if="modalType === 'edit'" @submit.prevent="handleSubmit" class="space-y-4">
+                    <!-- Sub-Group Add/Edit Modal -->
+                    <form v-else-if="(modalType === 'add' || modalType === 'edit') && modalContext === 'subGroup'" @submit.prevent="handleSubGroupSubmit" class="space-y-4">
+                        <!-- Title/Name field -->
                         <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700">Nama Kategori</label>
-                            <Input v-model="form.title" />
+                            <label class="mb-1 block text-sm font-medium text-gray-700">
+                                {{ subGroupModalType === 'editItem' ? 'Title' : 'Nama Audio Group' }}
+                            </label>
+                            <Input v-model="subGroupForm.title" :placeholder="subGroupModalType === 'editItem' ? 'Masukkan title' : 'Masukkan nama audio group'" />
                         </div>
-                        
+
+                        <!-- URL field (only for audio items when editing or adding to existing group) -->
+                        <div v-if="subGroupModalType === 'editItem' || (subGroupModalType === 'noChild' && selectedSubGroupParent)">
+                            <label class="mb-1 block text-sm font-medium text-gray-700">Link / Url</label>
+                            <Input v-model="subGroupForm.url" placeholder="Masukkan url" />
+                        </div>
+
+                        <!-- Duration field (only for audio items when editing or adding to existing group) -->
+                        <div v-if="subGroupModalType === 'editItem' || (subGroupModalType === 'noChild' && selectedSubGroupParent)">
+                            <label class="mb-1 block text-sm font-medium text-gray-700">Durasi</label>
+                            <TimePicker v-model="subGroupForm.duration" />
+                        </div>
+
+                        <!-- Urutan field - always show for all types -->
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Urutan</label>
                             <Popover :open="comboboxOpen" @update:open="comboboxOpen = $event">
@@ -359,7 +728,7 @@ const selectUrutan = (position: number) => {
                                         :aria-expanded="comboboxOpen"
                                         class="w-full justify-between"
                                     >
-                                        {{ selectedUrutanLabel }}
+                                        {{ selectedSubGroupUrutanLabel }}
                                         <Icon icon="mdi:unfold-more-horizontal" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -373,11 +742,11 @@ const selectUrutan = (position: number) => {
                                                     v-for="option in urutanOptions"
                                                     :key="option.position"
                                                     :value="option.label"
-                                                    @select="selectUrutan(option.position)"
+                                                    @select="selectSubGroupUrutan(option.position)"
                                                 >
                                                     <Icon
                                                         icon="mdi:check"
-                                                        :class="cn('mr-2 h-4 w-4', form.seq === option.position ? 'opacity-100' : 'opacity-0')"
+                                                        :class="cn('mr-2 h-4 w-4', subGroupForm.seq === option.position ? 'opacity-100' : 'opacity-0')"
                                                     />
                                                     {{ option.label }}
                                                 </CommandItem>
@@ -390,8 +759,12 @@ const selectUrutan = (position: number) => {
 
                         <div class="flex justify-end gap-2 pt-2">
                             <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button type="submit" class="bg-[#f0ad4e] hover:bg-[#eea236]" :disabled="form.processing">
-                                Update
+                            <Button 
+                                type="submit" 
+                                :class="modalType === 'add' ? 'bg-[#5cb85c] hover:bg-[#4cae4c]' : 'bg-[#f0ad4e] hover:bg-[#eea236]'" 
+                                :disabled="subGroupForm.processing"
+                            >
+                                {{ modalType === 'add' ? 'Simpan' : 'Update' }}
                             </Button>
                         </div>
                     </form>
@@ -399,11 +772,11 @@ const selectUrutan = (position: number) => {
                     <!-- Delete Modal -->
                     <div v-else-if="modalType === 'delete'" class="space-y-4">
                         <p class="text-sm text-gray-600">
-                            Apakah Anda yakin ingin menghapus <strong>{{ selectedItem?.title }}</strong>?
+                            Apakah Anda yakin ingin menghapus <strong>{{ modalContext === 'subGroup' ? (selectedSubGroup && 'name' in selectedSubGroup ? selectedSubGroup.name : selectedSubGroup?.title) : selectedItem?.title }}</strong>?
                         </p>
                         <div class="flex justify-end gap-2">
                             <Button variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDelete">
+                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="modalContext === 'subGroup' ? handleSubGroupDelete() : handleDelete()">
                                 Hapus
                             </Button>
                         </div>

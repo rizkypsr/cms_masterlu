@@ -1,0 +1,20 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "/Users/rizkypsr/Library/Application Support/Herd/bin/php84",
+            "args": [
+                "/Users/rizkypsr/Dev/cms_masterlu/artisan",
+                "boost:mcp"
+            ]
+        },
+        "herd": {
+            "command": "/Users/rizkypsr/Library/Application Support/Herd/bin/php84",
+            "args": [
+                "/Applications/Herd.app/Contents/Resources/herd-mcp.phar"
+            ],
+            "env": {
+                "SITE_PATH": "/Users/rizkypsr/Dev/cms_masterlu"
+            }
+        }
+    }
+}

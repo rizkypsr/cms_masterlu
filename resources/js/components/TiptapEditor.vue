@@ -1,0 +1,206 @@
+<script setup lang="ts">
+import { Icon } from '@iconify/vue';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Underline from '@tiptap/extension-underline';
+import StarterKit from '@tiptap/starter-kit';
+import { useEditor, EditorContent } from '@tiptap/vue-3';
+import { ref, watch } from 'vue';
+
+const props = defineProps<{
+    modelValue: string;
+}>();
+
+const emit = defineEmits<{
+    'update:modelValue': [value: string];
+}>();
+
+const showCodeView = ref(false);
+const htmlCode = ref('');
+
+const editor = useEditor({
+    content: props.modelValue,
+    extensions: [
+        StarterKit.configure({
+            paragraph: {
+                HTMLAttributes: {
+                    style: 'margin-bottom: 1em;',
+                },
+            },
+        }),
+        Underline,
+        TextStyle,
+        Color,
+        Highlight.configure({ multicolor: true }),
+    ],
+    onUpdate: ({ editor }) => {
+        const html = editor.getHTML();
+        htmlCode.value = html;
+        emit('update:modelValue', html);
+    },
+    editorProps: {
+        attributes: {
+            class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-3',
+        },
+        transformPastedHTML(html) {
+            // Convert line breaks to paragraphs
+            return html
+                .split(/\n\n+/)
+                .map(para => para.trim())
+                .filter(para => para.length > 0)
+                .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+                .join('');
+        },
+    },
+});
+
+// Initialize htmlCode
+if (editor.value) {
+    htmlCode.value = editor.value.getHTML();
+}
+
+watch(() => props.modelValue, (value) => {
+    if (editor.value && value !== editor.value.getHTML()) {
+        editor.value.commands.setContent(value);
+        htmlCode.value = value;
+    }
+});
+
+const toggleBold = () => editor.value?.chain().focus().toggleBold().run();
+const toggleItalic = () => editor.value?.chain().focus().toggleItalic().run();
+const toggleUnderline = () => editor.value?.chain().focus().toggleUnderline().run();
+const toggleStrike = () => editor.value?.chain().focus().toggleStrike().run();
+
+const toggleCodeView = () => {
+    if (!showCodeView.value) {
+        // Switching to code view - get current HTML
+        htmlCode.value = editor.value?.getHTML() || '';
+    } else {
+        // Switching back to visual - update editor with HTML code
+        editor.value?.commands.setContent(htmlCode.value);
+        emit('update:modelValue', htmlCode.value);
+    }
+    showCodeView.value = !showCodeView.value;
+};
+
+const handleCodeChange = (event: Event) => {
+    const target = event.target as HTMLTextAreaElement;
+    htmlCode.value = target.value;
+};
+
+const setTextColor = (color: string) => {
+    editor.value?.chain().focus().setColor(color).run();
+};
+
+const setHighlight = (color: string) => {
+    editor.value?.chain().focus().setHighlight({ color }).run();
+};
+</script>
+
+<template>
+    <div class="border border-gray-300 rounded">
+        <!-- Toolbar -->
+        <div class="flex items-center gap-1 border-b border-gray-300 bg-gray-50 p-2">
+            <button
+                v-if="!showCodeView"
+                type="button"
+                @click="toggleBold"
+                :class="{ 'bg-gray-300': editor?.isActive('bold') }"
+                class="rounded p-1.5 hover:bg-gray-200"
+                title="Bold"
+            >
+                <Icon icon="mdi:format-bold" class="h-5 w-5" />
+            </button>
+            <button
+                v-if="!showCodeView"
+                type="button"
+                @click="toggleItalic"
+                :class="{ 'bg-gray-300': editor?.isActive('italic') }"
+                class="rounded p-1.5 hover:bg-gray-200"
+                title="Italic"
+            >
+                <Icon icon="mdi:format-italic" class="h-5 w-5" />
+            </button>
+            <button
+                v-if="!showCodeView"
+                type="button"
+                @click="toggleUnderline"
+                :class="{ 'bg-gray-300': editor?.isActive('underline') }"
+                class="rounded p-1.5 hover:bg-gray-200"
+                title="Underline"
+            >
+                <Icon icon="mdi:format-underline" class="h-5 w-5" />
+            </button>
+            <button
+                v-if="!showCodeView"
+                type="button"
+                @click="toggleStrike"
+                :class="{ 'bg-gray-300': editor?.isActive('strike') }"
+                class="rounded p-1.5 hover:bg-gray-200"
+                title="Strikethrough"
+            >
+                <Icon icon="mdi:format-strikethrough" class="h-5 w-5" />
+            </button>
+            
+            <div v-if="!showCodeView" class="mx-1 h-6 w-px bg-gray-300"></div>
+            
+            <!-- Text Color -->
+            <div v-if="!showCodeView" class="relative">
+                <input
+                    type="color"
+                    @input="setTextColor(($event.target as HTMLInputElement).value)"
+                    class="h-8 w-8 cursor-pointer rounded border-0"
+                    title="Text Color"
+                />
+            </div>
+            
+            <!-- Background Color -->
+            <div v-if="!showCodeView" class="relative">
+                <input
+                    type="color"
+                    @input="setHighlight(($event.target as HTMLInputElement).value)"
+                    class="h-8 w-8 cursor-pointer rounded border-0"
+                    title="Background Color"
+                />
+            </div>
+            
+            <div class="mx-1 h-6 w-px bg-gray-300"></div>
+            
+            <button
+                type="button"
+                @click="toggleCodeView"
+                :class="{ 'bg-gray-300': showCodeView }"
+                class="rounded p-1.5 hover:bg-gray-200"
+                title="Code View"
+            >
+                <Icon icon="mdi:code-tags" class="h-5 w-5" />
+            </button>
+        </div>
+        
+        <!-- Editor Content -->
+        <div v-if="!showCodeView" class="bg-white">
+            <EditorContent :editor="editor" />
+        </div>
+        
+        <!-- HTML Code View -->
+        <div v-else class="bg-white">
+            <textarea
+                :value="htmlCode"
+                @input="handleCodeChange"
+                class="w-full min-h-[200px] p-3 font-mono text-sm focus:outline-none border-0 resize-none"
+                placeholder="Enter HTML code..."
+            ></textarea>
+        </div>
+    </div>
+</template>
+
+<style>
+.ProseMirror {
+    min-height: 200px;
+}
+
+.ProseMirror:focus {
+    outline: none;
+}
+</style>

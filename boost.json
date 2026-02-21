@@ -1,0 +1,17 @@
+{
+    "agents": [
+        "junie",
+        "cursor",
+        "opencode"
+    ],
+    "guidelines": true,
+    "herd_mcp": true,
+    "mcp": true,
+    "sail": false,
+    "skills": [
+        "wayfinder-development",
+        "pest-testing",
+        "inertia-vue-development",
+        "tailwindcss-development"
+    ]
+}

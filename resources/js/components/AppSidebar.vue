@@ -23,6 +23,20 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
+    {
+        title: 'Topik',
+        icon: Folder,
+        items: [
+            {
+                title: 'Topik 1',
+                href: '/topic/CH',
+            },
+            {
+                title: 'Topik 2',
+                href: '/topic/ID',
+            },
+        ],
+    },
 ];
 
 const footerNavItems: NavItem[] = [
