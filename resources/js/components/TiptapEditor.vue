@@ -10,6 +10,7 @@ import { ref, watch } from 'vue';
 
 const props = defineProps<{
     modelValue: string;
+    height?: string;
 }>();
 
 const emit = defineEmits<{
@@ -41,7 +42,7 @@ const editor = useEditor({
     },
     editorProps: {
         attributes: {
-            class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-3',
+            class: 'prose prose-sm max-w-none focus:outline-none p-3',
         },
         transformPastedHTML(html) {
             // Convert line breaks to paragraphs
@@ -179,7 +180,7 @@ const setHighlight = (color: string) => {
         </div>
         
         <!-- Editor Content -->
-        <div v-if="!showCodeView" class="bg-white">
+        <div v-if="!showCodeView" class="bg-white overflow-y-auto" :style="{ height: height || '200px' }">
             <EditorContent :editor="editor" />
         </div>
         
@@ -188,7 +189,8 @@ const setHighlight = (color: string) => {
             <textarea
                 :value="htmlCode"
                 @input="handleCodeChange"
-                class="w-full min-h-[200px] p-3 font-mono text-sm focus:outline-none border-0 resize-none"
+                :style="{ height: height || '200px' }"
+                class="w-full p-3 font-mono text-sm focus:outline-none border-0 resize-none"
                 placeholder="Enter HTML code..."
             ></textarea>
         </div>
@@ -197,7 +199,7 @@ const setHighlight = (color: string) => {
 
 <style>
 .ProseMirror {
-    min-height: 200px;
+    min-height: 100%;
 }
 
 .ProseMirror:focus {

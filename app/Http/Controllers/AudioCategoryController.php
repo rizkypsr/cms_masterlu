@@ -423,28 +423,24 @@ class AudioCategoryController extends Controller
             'script' => 'nullable|string',
         ]);
 
-        // Convert timestamp string (HH:MM:SS or MM:SS) to milliseconds
+        // Convert timestamp string (HH:MM:SS or MM:SS) to seconds
         $timeParts = explode(':', $request->timestamp);
-        $milliseconds = 0;
+        $seconds = 0;
 
         if (count($timeParts) === 3) {
             // HH:MM:SS format
-            $milliseconds = ((int) $timeParts[0] * 3600 + (int) $timeParts[1] * 60 + (int) $timeParts[2]) * 1000;
+            $seconds = ((int) $timeParts[0] * 3600 + (int) $timeParts[1] * 60 + (int) $timeParts[2]);
         } elseif (count($timeParts) === 2) {
             // MM:SS format
-            $milliseconds = ((int) $timeParts[0] * 60 + (int) $timeParts[1]) * 1000;
+            $seconds = ((int) $timeParts[0] * 60 + (int) $timeParts[1]);
         } else {
-            // Assume it's already in milliseconds or seconds
-            $milliseconds = (int) $request->timestamp;
-            if ($milliseconds < 100000) {
-                // Probably in seconds, convert to milliseconds
-                $milliseconds *= 1000;
-            }
+            // Assume it's already in seconds
+            $seconds = (int) $request->timestamp;
         }
 
         AudioSubtitle::create([
             'audio_id' => $audio->id,
-            'timestamp' => $milliseconds,
+            'timestamp' => $seconds,
             'title' => $request->title,
             'description' => $request->description,
             'script' => $request->script,
@@ -573,27 +569,23 @@ class AudioCategoryController extends Controller
             'script' => 'nullable|string',
         ]);
 
-        // Convert timestamp string (HH:MM:SS or MM:SS) to milliseconds
+        // Convert timestamp string (HH:MM:SS or MM:SS) to seconds
         $timeParts = explode(':', $request->timestamp);
-        $milliseconds = 0;
+        $seconds = 0;
 
         if (count($timeParts) === 3) {
             // HH:MM:SS format
-            $milliseconds = ((int) $timeParts[0] * 3600 + (int) $timeParts[1] * 60 + (int) $timeParts[2]) * 1000;
+            $seconds = ((int) $timeParts[0] * 3600 + (int) $timeParts[1] * 60 + (int) $timeParts[2]);
         } elseif (count($timeParts) === 2) {
             // MM:SS format
-            $milliseconds = ((int) $timeParts[0] * 60 + (int) $timeParts[1]) * 1000;
+            $seconds = ((int) $timeParts[0] * 60 + (int) $timeParts[1]);
         } else {
-            // Assume it's already in milliseconds or seconds
-            $milliseconds = (int) $request->timestamp;
-            if ($milliseconds < 100000) {
-                // Probably in seconds, convert to milliseconds
-                $milliseconds *= 1000;
-            }
+            // Assume it's already in seconds
+            $seconds = (int) $request->timestamp;
         }
 
         $subtitle->update([
-            'timestamp' => $milliseconds,
+            'timestamp' => $seconds,
             'title' => $request->title,
             'description' => $request->description,
             'script' => $request->script,

@@ -5,12 +5,26 @@ import { ref, computed } from 'vue';
 import TiptapEditor from '@/components/TiptapEditor.vue';
 import { Button } from '@/components/ui/button';
 import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 
 interface BookChapter {
@@ -86,12 +100,48 @@ const modalOpen = ref(false);
 const modalType = ref<'add' | 'edit' | 'delete'>('add');
 const modalTitle = ref('');
 const selectedContent = ref<BookContent | null>(null);
+const comboboxOpen = ref(false);
 
 // Form
 const form = useForm({
     page: 1 as number,
     content: '',
 });
+
+// Halaman options
+const halamanOptions = computed(() => {
+    const options: { position: number; label: string }[] = [];
+    
+    // Sort contents by page number
+    const sortedContents = [...props.contents].sort((a, b) => a.page - b.page);
+    
+    sortedContents.forEach((content) => {
+        options.push({
+            position: content.page,
+            label: `${content.page} - Halaman ${content.page}`,
+        });
+    });
+    
+    // Add next page option
+    const lastPage = sortedContents.length > 0 ? Math.max(...sortedContents.map(c => c.page)) : 0;
+    const nextPage = lastPage + 1;
+    options.push({
+        position: nextPage,
+        label: `${nextPage} - (Terakhir)`,
+    });
+    
+    return options;
+});
+
+const selectedHalamanLabel = computed(() => {
+    const option = halamanOptions.value.find(opt => opt.position === form.page);
+    return option?.label || 'Pilih halaman...';
+});
+
+const selectHalaman = (position: number) => {
+    form.page = position;
+    comboboxOpen.value = false;
+};
 
 // Open modal functions
 const openModal = (type: 'add' | 'edit' | 'delete', content?: BookContent) => {
@@ -335,12 +385,46 @@ const goBack = () => {
                     <form v-if="modalType === 'add' || modalType === 'edit'" @submit.prevent="handleSubmit" class="space-y-4">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Halaman</label>
-                            <Input v-model.number="form.page" type="number" placeholder="Masukkan nomor halaman" min="1" />
+                            <Popover :open="comboboxOpen" @update:open="comboboxOpen = $event">
+                                <PopoverTrigger as-child>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        :aria-expanded="comboboxOpen"
+                                        class="w-full justify-between"
+                                    >
+                                        {{ selectedHalamanLabel }}
+                                        <Icon icon="mdi:unfold-more-horizontal" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent class="w-[--reka-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Cari halaman..." />
+                                        <CommandEmpty>Tidak ditemukan.</CommandEmpty>
+                                        <CommandList>
+                                            <CommandGroup>
+                                                <CommandItem
+                                                    v-for="option in halamanOptions"
+                                                    :key="option.position"
+                                                    :value="option.label"
+                                                    @select="selectHalaman(option.position)"
+                                                >
+                                                    <Icon
+                                                        icon="mdi:check"
+                                                        :class="cn('mr-2 h-4 w-4', form.page === option.position ? 'opacity-100' : 'opacity-0')"
+                                                    />
+                                                    {{ option.label }}
+                                                </CommandItem>
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Konten</label>
-                            <TiptapEditor v-model="form.content" />
+                            <TiptapEditor v-model="form.content" height="300px"/>
                         </div>
 
                         <div class="flex justify-end gap-2 pt-2">

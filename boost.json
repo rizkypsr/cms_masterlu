@@ -1,12 +1,15 @@
 {
     "agents": [
-        "junie",
         "cursor",
-        "opencode"
+        "opencode",
+        "copilot"
     ],
     "guidelines": true,
-    "herd_mcp": true,
+    "herd_mcp": false,
     "mcp": true,
+    "packages": [
+        "laravel/fortify"
+    ],
     "sail": false,
     "skills": [
         "wayfinder-development",

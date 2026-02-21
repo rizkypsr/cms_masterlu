@@ -2,7 +2,6 @@
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import TimePicker from '@/components/TimePicker.vue';
 import TiptapEditor from '@/components/TiptapEditor.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,10 +36,20 @@ const props = defineProps<{
 const page = usePage();
 const user = page.props.auth?.user;
 
-// Format timestamp from milliseconds to HH:MM:SS
-const formatTimestamp = (milliseconds: string | number): string => {
-    const ms = typeof milliseconds === 'string' ? parseInt(milliseconds) : milliseconds;
-    const totalSeconds = Math.floor(ms / 1000);
+// Format timestamp - handles both seconds and HH:MM:SS format
+const formatTimestamp = (timestamp: string | number): string => {
+    // If it's already in HH:MM:SS format, return as is
+    if (typeof timestamp === 'string' && timestamp.includes(':')) {
+        return timestamp;
+    }
+    
+    // Convert to number
+    const value = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
+    
+    // If value is very small (< 86400 = 24 hours in seconds), treat as seconds
+    // If value is large, treat as milliseconds
+    const totalSeconds = value < 86400 ? value : Math.floor(value / 1000);
+    
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
@@ -87,6 +96,45 @@ const form = useForm({
     script: '',
 });
 
+// Format timestamp input as user types (HH:MM:SS)
+const formatTimestampInput = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    let value = input.value.replace(/\D/g, ''); // Remove non-digits
+    
+    // Limit to 6 digits (HHMMSS)
+    if (value.length > 6) {
+        value = value.slice(0, 6);
+    }
+    
+    // Format as HH:MM:SS
+    let formatted = '';
+    if (value.length > 0) {
+        formatted = value.slice(0, 2);
+        if (value.length > 2) {
+            formatted += ':' + value.slice(2, 4);
+        }
+        if (value.length > 4) {
+            formatted += ':' + value.slice(4, 6);
+        }
+    }
+    
+    form.timestamp = formatted;
+};
+
+// Convert HH:MM:SS to seconds
+const timestampToSeconds = (timestamp: string): number => {
+    if (!timestamp) return 0;
+    
+    const parts = timestamp.split(':');
+    if (parts.length !== 3) return 0;
+    
+    const hours = parseInt(parts[0]) || 0;
+    const minutes = parseInt(parts[1]) || 0;
+    const seconds = parseInt(parts[2]) || 0;
+    
+    return hours * 3600 + minutes * 60 + seconds;
+};
+
 // Upload SRT form
 const uploadForm = useForm({
     srt_file: null as File | null,
@@ -125,14 +173,24 @@ const openModal = (type: 'add' | 'edit' | 'delete' | 'deleteAll' | 'uploadSrt', 
 
 const handleSubmit = () => {
     if (modalType.value === 'add') {
-        form.post(`/audio/subtitle/${props.audio.id}`, {
+        router.post(`/audio/subtitle/${props.audio.id}`, {
+            timestamp: form.timestamp,
+            title: form.title,
+            description: form.description,
+            script: form.script,
+        }, {
             onSuccess: () => {
                 modalOpen.value = false;
                 form.reset();
             },
         });
     } else if (modalType.value === 'edit' && selectedItem.value) {
-        form.put(`/audio/subtitle/item/${selectedItem.value.id}`, {
+        router.put(`/audio/subtitle/item/${selectedItem.value.id}`, {
+            timestamp: form.timestamp,
+            title: form.title,
+            description: form.description,
+            script: form.script,
+        }, {
             onSuccess: () => {
                 modalOpen.value = false;
                 form.reset();
@@ -206,32 +264,32 @@ const exportSrt = () => {
                             class="bg-[#d9534f] hover:bg-[#d43f3a]"
                             size="sm"
                         >
-                            <Icon icon="mdi:delete" class="mr-1 h-4 w-4" />
-                            Hapus Semua Data
+                            <Icon icon="mdi:delete" class="h-4 w-4 lg:mr-1" />
+                            <span class="hidden lg:inline">Hapus Semua Data</span>
                         </Button>
                         <Button 
                             @click="exportSrt"
                             class="bg-[#f0ad4e] hover:bg-[#eea236]"
                             size="sm"
                         >
-                            <Icon icon="mdi:download" class="mr-1 h-4 w-4" />
-                            Export SRT
+                            <Icon icon="mdi:download" class="h-4 w-4 lg:mr-1" />
+                            <span class="hidden lg:inline">Export SRT</span>
                         </Button>
                         <Button 
                             @click="openModal('uploadSrt')"
                             class="bg-[#5bc0de] hover:bg-[#46b8da]"
                             size="sm"
                         >
-                            <Icon icon="mdi:upload" class="mr-1 h-4 w-4" />
-                            Tambah Subtitle
+                            <Icon icon="mdi:upload" class="h-4 w-4 lg:mr-1" />
+                            <span class="hidden lg:inline">Tambah Subtitle</span>
                         </Button>
                         <Button 
                             @click="openModal('add')"
                             class="bg-[#5cb85c] hover:bg-[#4cae4c]"
                             size="sm"
                         >
-                            <Icon icon="mdi:plus" class="mr-1 h-4 w-4" />
-                            Tambah Data
+                            <Icon icon="mdi:plus" class="h-4 w-4 lg:mr-1" />
+                            <span class="hidden lg:inline">Tambah Data</span>
                         </Button>
                     </div>
                 </div>
@@ -377,17 +435,24 @@ const exportSrt = () => {
 
         <!-- Modal -->
         <Dialog :open="modalOpen" @update:open="modalOpen = $event">
-            <DialogContent class="top-[10%] translate-y-0 sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
+            <DialogContent class="top-[10%] translate-y-0 sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
+                <DialogHeader class="px-6 pt-6 pb-0">
                     <DialogTitle>{{ modalTitle }}</DialogTitle>
                 </DialogHeader>
 
-                <div class="py-4">
+                <!-- Scrollable Content -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
                     <!-- Add/Edit Modal -->
                     <form v-if="modalType === 'add' || modalType === 'edit'" @submit.prevent="handleSubmit" class="space-y-4">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Waktu</label>
-                            <TimePicker v-model="form.timestamp" />
+                            <Input 
+                                v-model="form.timestamp" 
+                                @input="formatTimestampInput"
+                                placeholder="000000 (akan diformat menjadi HH:MM:SS)"
+                                maxlength="8"
+                            />
+                            <p class="mt-1 text-xs text-gray-500">Ketik 6 angka, contoh: 100000 → 10:00:00</p>
                         </div>
                         
                         <div>
@@ -397,54 +462,31 @@ const exportSrt = () => {
                         
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Deskripsi</label>
-                            <TiptapEditor v-model="form.description" />
+                            <TiptapEditor v-model="form.description" height="300px" />
                         </div>
                         
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Script</label>
-                            <TiptapEditor v-model="form.script" />
-                        </div>
-
-                        <div class="flex justify-end gap-2 pt-2">
-                            <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button 
-                                type="submit" 
-                                :class="modalType === 'add' ? 'bg-[#5cb85c] hover:bg-[#4cae4c]' : 'bg-[#f0ad4e] hover:bg-[#eea236]'" 
-                                :disabled="form.processing"
-                            >
-                                {{ modalType === 'add' ? 'Simpan' : 'Update' }}
-                            </Button>
+                            <TiptapEditor v-model="form.script" height="300px" />
                         </div>
                     </form>
 
                     <!-- Delete Modal -->
-                    <div v-else-if="modalType === 'delete'" class="space-y-4">
+                    <div v-else-if="modalType === 'delete'">
                         <p class="text-sm text-gray-600">
                             Apakah Anda yakin ingin menghapus subtitle ini?
                         </p>
-                        <div class="flex justify-end gap-2">
-                            <Button variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDelete">
-                                Hapus
-                            </Button>
-                        </div>
                     </div>
 
                     <!-- Delete All Modal -->
-                    <div v-else-if="modalType === 'deleteAll'" class="space-y-4">
+                    <div v-else-if="modalType === 'deleteAll'">
                         <p class="text-sm text-gray-600">
                             Apakah Anda yakin ingin menghapus <strong>semua</strong> subtitle untuk audio ini?
                         </p>
-                        <div class="flex justify-end gap-2">
-                            <Button variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDeleteAll">
-                                Hapus Semua
-                            </Button>
-                        </div>
                     </div>
 
                     <!-- Upload SRT Modal -->
-                    <form v-else-if="modalType === 'uploadSrt'" @submit.prevent="handleUploadSrt" class="space-y-4">
+                    <form v-else-if="modalType === 'uploadSrt'" @submit.prevent="handleUploadSrt">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">SRT File</label>
                             <input 
@@ -455,18 +497,52 @@ const exportSrt = () => {
                             />
                             <p class="mt-1 text-xs text-gray-500">Upload an SRT subtitle file (max 10MB)</p>
                         </div>
-
-                        <div class="flex justify-end gap-2 pt-2">
-                            <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button 
-                                type="submit" 
-                                class="bg-[#f0ad4e] hover:bg-[#eea236]" 
-                                :disabled="uploadForm.processing || !uploadForm.srt_file"
-                            >
-                                Upload
-                            </Button>
-                        </div>
                     </form>
+                </div>
+
+                <!-- Fixed Footer with Buttons -->
+                <div class="border-t border-gray-200 px-6 py-4">
+                    <!-- Add/Edit Buttons -->
+                    <div v-if="modalType === 'add' || modalType === 'edit'" class="flex justify-end gap-2">
+                        <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
+                        <Button 
+                            type="button"
+                            @click="handleSubmit"
+                            :class="modalType === 'add' ? 'bg-[#5cb85c] hover:bg-[#4cae4c]' : 'bg-[#f0ad4e] hover:bg-[#eea236]'" 
+                            :disabled="form.processing"
+                        >
+                            {{ modalType === 'add' ? 'Simpan' : 'Update' }}
+                        </Button>
+                    </div>
+
+                    <!-- Delete Buttons -->
+                    <div v-else-if="modalType === 'delete'" class="flex justify-end gap-2">
+                        <Button variant="outline" @click="modalOpen = false">Batal</Button>
+                        <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDelete">
+                            Hapus
+                        </Button>
+                    </div>
+
+                    <!-- Delete All Buttons -->
+                    <div v-else-if="modalType === 'deleteAll'" class="flex justify-end gap-2">
+                        <Button variant="outline" @click="modalOpen = false">Batal</Button>
+                        <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDeleteAll">
+                            Hapus Semua
+                        </Button>
+                    </div>
+
+                    <!-- Upload SRT Buttons -->
+                    <div v-else-if="modalType === 'uploadSrt'" class="flex justify-end gap-2">
+                        <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
+                        <Button 
+                            type="button"
+                            @click="handleUploadSrt"
+                            class="bg-[#f0ad4e] hover:bg-[#eea236]" 
+                            :disabled="uploadForm.processing || !uploadForm.srt_file"
+                        >
+                            Upload
+                        </Button>
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

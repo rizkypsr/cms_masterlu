@@ -81,6 +81,7 @@ This project has domain-specific skills available. You MUST activate the relevan
 
 - You should use the `tinker` tool when you need to execute PHP to debug code or query Eloquent models directly.
 - Use the `database-query` tool when you only need to read from the database.
+- Use the `database-schema` tool to inspect table structure before writing migrations or models.
 
 ## Reading Browser Logs With the `browser-logs` Tool
 
@@ -111,7 +112,7 @@ This project has domain-specific skills available. You MUST activate the relevan
 ## Constructors
 
 - Use PHP 8 constructor property promotion in `__construct()`.
-    - <code-snippet>public function __construct(public GitHub $github) { }</code-snippet>
+    - `public function __construct(public GitHub $github) { }`
 - Do not allow empty `__construct()` methods with zero parameters unless the constructor is private.
 
 ## Type Declarations
@@ -119,12 +120,13 @@ This project has domain-specific skills available. You MUST activate the relevan
 - Always use explicit return type declarations for methods and functions.
 - Use appropriate PHP type hints for method parameters.
 
-<code-snippet name="Explicit Return Types and Method Params" lang="php">
+<!-- Explicit Return Types and Method Params -->
+```php
 protected function isAccessible(User $user, ?string $path = null): bool
 {
     ...
 }
-</code-snippet>
+```
 
 ## Enums
 
@@ -138,13 +140,6 @@ protected function isAccessible(User $user, ?string $path = null): bool
 
 - Add useful array shape type definitions when appropriate.
 
-=== herd rules ===
-
-# Laravel Herd
-
-- The application is served by Laravel Herd and will be available at: `https?://[kebab-case-project-dir].test`. Use the `get-absolute-url` tool to generate valid URLs for the user.
-- You must not run any commands to make the site available via HTTP(S). It is always available through Laravel Herd.
-
 === tests rules ===
 
 # Test Enforcement
@@ -157,7 +152,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 # Inertia
 
 - Inertia creates fully client-side rendered SPAs without modern SPA complexity, leveraging existing server-side patterns.
-- Components live in `resources/js/Pages` (unless specified in `vite.config.js`). Use `Inertia::render()` for server-side routing instead of Blade views.
+- Components live in `resources/js/pages` (unless specified in `vite.config.js`). Use `Inertia::render()` for server-side routing instead of Blade views.
 - ALWAYS use `search-docs` tool for version-specific Inertia documentation and updated code examples.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
@@ -265,8 +260,8 @@ Wayfinder generates TypeScript functions for Laravel routes. Import from `@/acti
 
 # Laravel Pint Code Formatter
 
-- You must run `vendor/bin/pint --dirty` before finalizing changes to ensure your code matches the project's expected style.
-- Do not run `vendor/bin/pint --test`, simply run `vendor/bin/pint` to fix any formatting issues.
+- You must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
+- Do not run `vendor/bin/pint --test --format agent`, simply run `vendor/bin/pint --format agent` to fix any formatting issues.
 
 === pest/core rules ===
 
@@ -292,4 +287,35 @@ Vue components must have a single root element.
 - Always use existing Tailwind conventions; check project patterns before adding new ones.
 - IMPORTANT: Always use `search-docs` tool for version-specific Tailwind CSS documentation and updated code examples. Never rely on training data.
 - IMPORTANT: Activate `tailwindcss-development` every time you're working with a Tailwind CSS or styling-related task.
+
+=== laravel/fortify rules ===
+
+## Laravel Fortify
+
+Fortify is a headless authentication backend that provides authentication routes and controllers for Laravel applications.
+
+**Before implementing any authentication features, use the `search-docs` tool to get the latest docs for that specific feature.**
+
+### Configuration & Setup
+
+- Check `config/fortify.php` to see what's enabled. Use `search-docs` for detailed information on specific features.
+- Enable features by adding them to the `'features' => []` array: `Features::registration()`, `Features::resetPasswords()`, etc.
+- To see the all Fortify registered routes, use the `list-routes` tool with the `only_vendor: true` and `action: "Fortify"` parameters.
+- Fortify includes view routes by default (login, register). Set `'views' => false` in the configuration file to disable them if you're handling views yourself.
+
+### Customization
+
+- Views can be customized in `FortifyServiceProvider`'s `boot()` method using `Fortify::loginView()`, `Fortify::registerView()`, etc.
+- Customize authentication logic with `Fortify::authenticateUsing()` for custom user retrieval / validation.
+- Actions in `app/Actions/Fortify/` handle business logic (user creation, password reset, etc.). They're fully customizable, so you can modify them to change feature behavior.
+
+## Available Features
+
+- `Features::registration()` for user registration.
+- `Features::emailVerification()` to verify new user emails.
+- `Features::twoFactorAuthentication()` for 2FA with QR codes and recovery codes.
+  - Add options: `['confirmPassword' => true, 'confirm' => true]` to require password confirmation and OTP confirmation before enabling 2FA.
+- `Features::updateProfileInformation()` to let users update their profile.
+- `Features::updatePasswords()` to let users change their passwords.
+- `Features::resetPasswords()` for password reset via email.
 </laravel-boost-guidelines>

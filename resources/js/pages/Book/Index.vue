@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -429,7 +429,25 @@ const handleChapterDelete = () => {
 };
 
 const navigateToContent = (chapterId: number) => {
-    router.visit(`/book/chapter/${chapterId}/content`);
+    window.open(`/book/chapter/${chapterId}/content`, '_blank');
+};
+
+// Scroll preservation
+const leftPanelScroll = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+    if (leftPanelScroll.value) {
+        const savedScroll = sessionStorage.getItem('book-category-left-panel');
+        if (savedScroll) {
+            leftPanelScroll.value.scrollTop = parseInt(savedScroll);
+        }
+    }
+});
+
+const saveLeftPanelScroll = () => {
+    if (leftPanelScroll.value) {
+        sessionStorage.setItem('book-category-left-panel', leftPanelScroll.value.scrollTop.toString());
+    }
 };
 </script>
 
@@ -455,7 +473,7 @@ const navigateToContent = (chapterId: number) => {
                     </div>
 
                     <!-- Category List -->
-                    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+                    <div ref="leftPanelScroll" class="flex-1 space-y-4 overflow-y-auto bg-white p-4" @scroll="saveLeftPanelScroll">
                         <template v-if="categories.length">
                             <Card
                                 v-for="category in categories"
@@ -504,12 +522,12 @@ const navigateToContent = (chapterId: number) => {
                                         :key="book.id"
                                         class="flex items-center justify-between border-b border-gray-100 px-4 py-2 last:border-b-0 cursor-pointer hover:bg-gray-50"
                                         :class="{ 'bg-blue-50 ring-2 ring-blue-200': props.selectedBook?.id === book.id }"
-                                        @click="router.visit(`/book/${book.id}`, { preserveState: false })"
+                                        @click="router.visit(`/book/${book.id}`, { preserveScroll: true })"
                                     >
                                         <span class="text-sm text-gray-600">{{ book.title }}</span>
                                         <div class="flex items-center gap-1" @click.stop>
                                             <button
-                                                @click="router.visit(`/book/${book.id}`, { preserveState: false })"
+                                                @click="router.visit(`/book/${book.id}`, { preserveScroll: true })"
                                                 class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
                                             >
                                                 <Icon icon="mdi:navigation-variant" class="h-4 w-4" />

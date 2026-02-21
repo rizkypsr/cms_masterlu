@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
-import { computed } from 'vue';
+import { computed, ref, onMounted, onBeforeUpdate, onUpdated, watch } from 'vue';
 import { Card } from '@/components/ui/card';
 
 export interface PanelAction {
@@ -35,10 +35,12 @@ interface Props {
     data: any[];
     columns: NestedPanelColumn;
     emptyMessage?: string;
+    scrollKey?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     emptyMessage: 'Belum ada data',
+    scrollKey: 'nested-panel-scroll',
 });
 
 const colorClasses = {
@@ -54,10 +56,33 @@ const shouldShowAction = (action: PanelAction, item: any, parent?: any) => {
     }
     return true;
 };
+
+// Scroll preservation using sessionStorage
+const scrollContainer = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+    if (scrollContainer.value) {
+        const savedScroll = sessionStorage.getItem(props.scrollKey);
+        if (savedScroll) {
+            scrollContainer.value.scrollTop = parseInt(savedScroll);
+        }
+    }
+});
+
+const saveScrollPosition = () => {
+    if (scrollContainer.value) {
+        sessionStorage.setItem(props.scrollKey, scrollContainer.value.scrollTop.toString());
+    }
+};
+
+// Save scroll position on scroll
+const handleScroll = () => {
+    saveScrollPosition();
+};
 </script>
 
 <template>
-    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+    <div ref="scrollContainer" class="flex-1 space-y-4 overflow-y-auto bg-white p-4" @scroll="handleScroll">
         <template v-if="data.length">
             <Card
                 v-for="item in data"

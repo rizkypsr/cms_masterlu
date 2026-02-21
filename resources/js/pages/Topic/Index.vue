@@ -286,7 +286,7 @@ const selectTopic = (topicId: number) => {
 };
 
 const navigateToDetail = (category: TopicCategory) => {
-    router.get(`/topic/category/${category.id}/detail`);
+    window.open(`/topic/category/${category.id}/detail`, '_blank');
 };
 </script>
 

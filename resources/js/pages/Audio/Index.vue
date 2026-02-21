@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import TimePicker from '@/components/TimePicker.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -267,7 +267,27 @@ const selectSubGroupUrutan = (position: number) => {
 };
 
 const selectChildCategory = (childId: number) => {
-    router.visit(`${baseUrl.value}/${childId}`);
+    router.visit(`${baseUrl.value}/${childId}`, {
+        preserveScroll: true,
+    });
+};
+
+// Scroll preservation
+const leftPanelScroll = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+    if (leftPanelScroll.value) {
+        const savedScroll = sessionStorage.getItem('audio-category-left-panel');
+        if (savedScroll) {
+            leftPanelScroll.value.scrollTop = parseInt(savedScroll);
+        }
+    }
+});
+
+const saveLeftPanelScroll = () => {
+    if (leftPanelScroll.value) {
+        sessionStorage.setItem('audio-category-left-panel', leftPanelScroll.value.scrollTop.toString());
+    }
 };
 
 // Sub-Group modal functions
@@ -441,7 +461,7 @@ const handleSubGroupDelete = () => {
                     </div>
 
                     <!-- Category List -->
-                    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+                    <div ref="leftPanelScroll" class="flex-1 space-y-4 overflow-y-auto bg-white p-4" @scroll="saveLeftPanelScroll">
                         <template v-if="categories.length">
                             <Card
                                 v-for="category in categories"
@@ -588,13 +608,14 @@ const handleSubGroupDelete = () => {
                                     >
                                         <span class="text-sm text-gray-600">{{ audio.title }}</span>
                                         <div class="flex items-center gap-1">
-                                            <button
-                                                @click="router.visit(`/audio/subtitle/${audio.id}`)"
+                                            <a
+                                                :href="`/audio/subtitle/${audio.id}`"
+                                                target="_blank"
                                                 class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
                                                 title="Subtitle"
                                             >
                                                 <Icon icon="mdi:closed-caption" class="h-4 w-4" />
-                                            </button>
+                                            </a>
                                             <button
                                                 @click="openSubGroupModal('edit', undefined, audio, sg)"
                                                 class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"

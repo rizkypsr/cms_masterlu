@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -401,7 +401,25 @@ const handleChapterDelete = () => {
 };
 
 const navigateToContent = (chapterId: number) => {
-    router.visit(`/topic2/chapter/${chapterId}/content`);
+    window.open(`/topic2/chapter/${chapterId}/content`, '_blank');
+};
+
+// Scroll preservation
+const leftPanelScroll = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+    if (leftPanelScroll.value) {
+        const savedScroll = sessionStorage.getItem('topic2-category-left-panel');
+        if (savedScroll) {
+            leftPanelScroll.value.scrollTop = parseInt(savedScroll);
+        }
+    }
+});
+
+const saveLeftPanelScroll = () => {
+    if (leftPanelScroll.value) {
+        sessionStorage.setItem('topic2-category-left-panel', leftPanelScroll.value.scrollTop.toString());
+    }
 };
 </script>
 
@@ -427,7 +445,7 @@ const navigateToContent = (chapterId: number) => {
                     </div>
 
                     <!-- Category List -->
-                    <div class="flex-1 space-y-4 overflow-y-auto bg-white p-4">
+                    <div ref="leftPanelScroll" class="flex-1 space-y-4 overflow-y-auto bg-white p-4" @scroll="saveLeftPanelScroll">
                         <template v-if="categories.length">
                             <Card
                                 v-for="category in categories"
@@ -476,12 +494,12 @@ const navigateToContent = (chapterId: number) => {
                                         :key="topic2.id"
                                         class="flex items-center justify-between border-b border-gray-100 px-4 py-2 last:border-b-0 cursor-pointer hover:bg-gray-50"
                                         :class="{ 'bg-blue-50 ring-2 ring-blue-200': props.selectedTopic2?.id === topic2.id }"
-                                        @click="router.visit(`/topic2/${topic2.id}`, { preserveState: false })"
+                                        @click="router.visit(`/topic2/${topic2.id}`, { preserveScroll: true })"
                                     >
                                         <span class="text-sm text-gray-600">{{ topic2.title }}</span>
                                         <div class="flex items-center gap-1" @click.stop>
                                             <button
-                                                @click="router.visit(`/topic2/${topic2.id}`, { preserveState: false })"
+                                                @click="router.visit(`/topic2/${topic2.id}`, { preserveScroll: true })"
                                                 class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
                                             >
                                                 <Icon icon="mdi:navigation-variant" class="h-4 w-4" />

@@ -482,6 +482,7 @@ const selectGroup = (groupId: number) => {
                                     <div class="flex items-center gap-1">
                                         <a
                                             :href="`/video/subtitle/${child.id}`"
+                                            target="_blank"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#5bc0de] text-white hover:bg-[#46b8da]"
                                             title="Subtitle"
                                         >

@@ -316,7 +316,10 @@ const selectUrutan = (position: number) => {
 };
 
 const selectChildCategory = (childId: number) => {
-    router.visit(`${baseUrl.value}/${childId}`);
+    router.visit(`${baseUrl.value}/${childId}`, {
+        preserveScroll: true,
+        preserveState: true,
+    });
 };
 
 // Left Panel Column Configuration
@@ -411,7 +414,7 @@ const rightPanelColumns = computed<NestedPanelColumn>(() => ({
     children: {
         accessor: 'children',
         itemAccessor: 'title',
-        onClick: (child) => router.visit(`/video/video-category/${child.id}`),
+        onClick: (child) => router.visit(`/video/video-category/${child.id}`, { preserveScroll: true, preserveState: true }),
         actions: [
             {
                 icon: 'mdi:navigation-variant',
@@ -471,6 +474,7 @@ const rightPanelColumns = computed<NestedPanelColumn>(() => ({
                         :data="categories"
                         :columns="leftPanelColumns"
                         empty-message="Belum ada kategori"
+                        scroll-key="video-category-left-panel"
                     />
                 </div>
 
