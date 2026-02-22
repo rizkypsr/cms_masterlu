@@ -26,7 +26,7 @@ const editor = useEditor({
         StarterKit.configure({
             paragraph: {
                 HTMLAttributes: {
-                    style: 'margin: 0; line-height: 1.5;',
+                    style: 'margin: 0; line-height: 1.5; min-height: 1.5em;',
                 },
             },
         }),
