@@ -162,6 +162,31 @@ const selectUrutan = (position: number) => {
     urutanComboboxOpen.value = false;
 };
 
+// Format duration input as user types (HH:MM:SS)
+const formatDurationInput = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    let value = input.value.replace(/\D/g, ''); // Remove non-digits
+    
+    // Limit to 6 digits (HHMMSS)
+    if (value.length > 6) {
+        value = value.slice(0, 6);
+    }
+    
+    // Format as HH:MM:SS
+    let formatted = '';
+    if (value.length > 0) {
+        formatted = value.slice(0, 2);
+        if (value.length > 2) {
+            formatted += ':' + value.slice(2, 4);
+        }
+        if (value.length > 4) {
+            formatted += ':' + value.slice(4, 6);
+        }
+    }
+    
+    form.duration = formatted;
+};
+
 const handleSubmit = () => {
     const baseUrl = props.lang === 'CH' ? '/audio/daftar-isi' : '/audio/topik';
     
@@ -261,7 +286,13 @@ const handleSubmit = () => {
 
                 <div>
                     <label class="mb-1 block text-sm font-medium text-gray-700">Durasi</label>
-                    <Input v-model="form.duration" placeholder="Masukkan durasi" />
+                    <Input 
+                        v-model="form.duration" 
+                        @input="formatDurationInput"
+                        placeholder="000000 (akan diformat menjadi HH:MM:SS)"
+                        maxlength="8"
+                    />
+                    <p class="mt-1 text-xs text-gray-500">Ketik 6 angka, contoh: 100000 → 10:00:00</p>
                 </div>
 
                 <div v-if="form.group_id && urutanOptions.length > 0">
