@@ -2,7 +2,6 @@
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
-import TimePicker from '@/components/TimePicker.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -288,6 +287,31 @@ const saveLeftPanelScroll = () => {
     if (leftPanelScroll.value) {
         sessionStorage.setItem('audio-category-left-panel', leftPanelScroll.value.scrollTop.toString());
     }
+};
+
+// Format duration input as user types (HH:MM:SS)
+const formatDurationInput = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    let value = input.value.replace(/\D/g, ''); // Remove non-digits
+    
+    // Limit to 6 digits (HHMMSS)
+    if (value.length > 6) {
+        value = value.slice(0, 6);
+    }
+    
+    // Format as HH:MM:SS
+    let formatted = '';
+    if (value.length > 0) {
+        formatted = value.slice(0, 2);
+        if (value.length > 2) {
+            formatted += ':' + value.slice(2, 4);
+        }
+        if (value.length > 4) {
+            formatted += ':' + value.slice(4, 6);
+        }
+    }
+    
+    subGroupForm.duration = formatted;
 };
 
 // Sub-Group modal functions
@@ -735,7 +759,13 @@ const handleSubGroupDelete = () => {
                         <!-- Duration field (only for audio items when editing or adding to existing group) -->
                         <div v-if="subGroupModalType === 'editItem' || (subGroupModalType === 'noChild' && selectedSubGroupParent)">
                             <label class="mb-1 block text-sm font-medium text-gray-700">Durasi</label>
-                            <TimePicker v-model="subGroupForm.duration" />
+                            <Input 
+                                v-model="subGroupForm.duration" 
+                                @input="formatDurationInput"
+                                placeholder="000000 (akan diformat menjadi HH:MM:SS)"
+                                maxlength="8"
+                            />
+                            <p class="mt-1 text-xs text-gray-500">Ketik 6 angka, contoh: 100000 → 10:00:00</p>
                         </div>
 
                         <!-- Urutan field - always show for all types -->
