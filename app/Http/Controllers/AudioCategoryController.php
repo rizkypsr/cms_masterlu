@@ -7,6 +7,7 @@ use App\Models\AudioSubGroup;
 use App\Models\AudioSubtitle;
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -154,40 +155,62 @@ class AudioCategoryController extends Controller
         $data = ['title' => $request->title];
         $lang = $category->languange;
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $categories = Category::where('parent_id', $category->parent_id)
-                ->where('type', 'audio')
-                ->where('languange', $lang)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($category, $targetPosition, $lang) {
+                $allItems = Category::where('parent_id', $category->parent_id)
+                    ->where('type', 'audio')
+                    ->where('languange', $lang)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $categories->search(fn ($c) => $c->id === $category->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $categories->count()) {
-                // SWAP operation
-                $targetCategory = $categories[$newPosition - 1];
-                $currentSeq = $category->seq;
-                $targetSeq = $targetCategory->seq;
-
-                $category->update(['seq' => $targetSeq]);
-                $targetCategory->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $categories->count()) {
-                // Moving to "Terakhir"
-                $remainingCategories = $categories->filter(fn ($c) => $c->id !== $category->id);
-                foreach ($remainingCategories->values() as $index => $cat) {
-                    $cat->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($c) => $c->id === $category->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingCategories->count() + 1;
-            }
-        }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
 
-        $category->update($data);
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'audio')
+                        ->where('languange', $lang)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'audio')
+                        ->where('languange', $lang)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $category->update($data);
+        }
 
         return back();
     }
@@ -299,38 +322,56 @@ class AudioCategoryController extends Controller
 
         $data = ['name' => $request->title];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $subGroups = AudioSubGroup::where('audio_category_id', $subGroup->audio_category_id)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($subGroup, $targetPosition) {
+                $allItems = AudioSubGroup::where('audio_category_id', $subGroup->audio_category_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $subGroups->search(fn ($sg) => $sg->id === $subGroup->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $subGroups->count()) {
-                // SWAP operation
-                $targetSubGroup = $subGroups[$newPosition - 1];
-                $currentSeq = $subGroup->seq;
-                $targetSeq = $targetSubGroup->seq;
-
-                $subGroup->update(['seq' => $targetSeq]);
-                $targetSubGroup->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $subGroups->count()) {
-                // Moving to "Terakhir"
-                $remainingSubGroups = $subGroups->filter(fn ($sg) => $sg->id !== $subGroup->id);
-                foreach ($remainingSubGroups->values() as $index => $sg) {
-                    $sg->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($sg) => $sg->id === $subGroup->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingSubGroups->count() + 1;
-            }
-        }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
 
-        $subGroup->update($data);
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    AudioSubGroup::where('audio_category_id', $subGroup->audio_category_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    AudioSubGroup::where('audio_category_id', $subGroup->audio_category_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $subGroup->update($data);
+        }
 
         return back();
     }
@@ -358,35 +399,53 @@ class AudioCategoryController extends Controller
             'duration' => $request->duration,
         ];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $audios = Audio::where('audio_sub_group_id', $audio->audio_sub_group_id)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($audio, $targetPosition) {
+                $allItems = Audio::where('audio_sub_group_id', $audio->audio_sub_group_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $audios->search(fn ($a) => $a->id === $audio->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $audios->count()) {
-                // SWAP operation
-                $targetAudio = $audios[$newPosition - 1];
-                $currentSeq = $audio->seq;
-                $targetSeq = $targetAudio->seq;
-
-                $audio->update(['seq' => $targetSeq]);
-                $targetAudio->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $audios->count()) {
-                // Moving to "Terakhir"
-                $remainingAudios = $audios->filter(fn ($a) => $a->id !== $audio->id);
-                foreach ($remainingAudios->values() as $index => $a) {
-                    $a->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($a) => $a->id === $audio->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingAudios->count() + 1;
-            }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Audio::where('audio_sub_group_id', $audio->audio_sub_group_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Audio::where('audio_sub_group_id', $audio->audio_sub_group_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
         }
 
         $audio->update($data);

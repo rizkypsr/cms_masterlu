@@ -109,9 +109,15 @@ const urutanOptions = computed(() => {
         // Video Category context
         let items: (VideoCategory | VideoCategoryChild)[] = [];
         
+        // Check if we're working with children
         if (isAddingVideoChild.value && selectedVideoCategoryParent.value) {
+            // Adding a child
+            items = selectedVideoCategoryParent.value.children || [];
+        } else if (selectedVideoCategoryParent.value) {
+            // Editing a child (parent is set)
             items = selectedVideoCategoryParent.value.children || [];
         } else {
+            // Working with parent items
             items = props.videoCategories || [];
         }
         
@@ -230,10 +236,22 @@ const openVideoCategoryModal = (type: 'view' | 'add' | 'edit' | 'delete', item?:
         case 'edit':
             modalTitle.value = 'Edit';
             form.title = item?.title || '';
-            if (isAddingVideoChild.value && parent) {
+            
+            // Check if editing a child (parent is provided) or parent item
+            if (parent) {
+                // Editing a child - find position in parent's children
                 const pos = (parent.children?.findIndex(c => c.id === item?.id) ?? -1) + 1;
                 form.seq = pos || null;
+            } else if (item && 'parent_id' in item && item.parent_id) {
+                // Editing a child but parent not provided - find parent and position
+                const parentItem = props.videoCategories?.find(vc => vc.id === item.parent_id);
+                if (parentItem) {
+                    selectedVideoCategoryParent.value = parentItem;
+                    const pos = (parentItem.children?.findIndex(c => c.id === item.id) ?? -1) + 1;
+                    form.seq = pos || null;
+                }
             } else {
+                // Editing a parent item - find position in videoCategories
                 const pos = (props.videoCategories?.findIndex(c => c.id === item?.id) ?? -1) + 1;
                 form.seq = pos || null;
             }

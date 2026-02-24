@@ -8,6 +8,7 @@ use App\Models\VideoCategory;
 use App\Models\VideoSubGroup;
 use App\Models\VideoSubtitle;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class VideoCategoryController extends Controller
@@ -198,40 +199,62 @@ class VideoCategoryController extends Controller
         $data = ['title' => $request->title];
         $lang = $category->languange;
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $categories = Category::where('parent_id', $category->parent_id)
-                ->where('type', 'video')
-                ->where('languange', $lang)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($category, $targetPosition, $lang) {
+                $allItems = Category::where('parent_id', $category->parent_id)
+                    ->where('type', 'video')
+                    ->where('languange', $lang)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $categories->search(fn ($c) => $c->id === $category->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $categories->count()) {
-                // SWAP operation
-                $targetCategory = $categories[$newPosition - 1];
-                $currentSeq = $category->seq;
-                $targetSeq = $targetCategory->seq;
-
-                $category->update(['seq' => $targetSeq]);
-                $targetCategory->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $categories->count()) {
-                // Moving to "Terakhir"
-                $remainingCategories = $categories->filter(fn ($c) => $c->id !== $category->id);
-                foreach ($remainingCategories->values() as $index => $cat) {
-                    $cat->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($c) => $c->id === $category->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingCategories->count() + 1;
-            }
-        }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
 
-        $category->update($data);
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'video')
+                        ->where('languange', $lang)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'video')
+                        ->where('languange', $lang)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $category->update($data);
+        }
 
         return back();
     }
@@ -311,38 +334,79 @@ class VideoCategoryController extends Controller
 
         $data = ['title' => $request->title];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
+            $isChild = $videoCategory->parent_id !== null;
 
-            $videoCategories = VideoCategory::where('sub_category_id', $videoCategory->sub_category_id)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
-
-            $currentPosition = $videoCategories->search(fn ($vc) => $vc->id === $videoCategory->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $videoCategories->count()) {
-                // SWAP operation
-                $targetVideoCategory = $videoCategories[$newPosition - 1];
-                $currentSeq = $videoCategory->seq;
-                $targetSeq = $targetVideoCategory->seq;
-
-                $videoCategory->update(['seq' => $targetSeq]);
-                $targetVideoCategory->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $videoCategories->count()) {
-                // Moving to "Terakhir"
-                $remainingVideoCategories = $videoCategories->filter(fn ($vc) => $vc->id !== $videoCategory->id);
-                foreach ($remainingVideoCategories->values() as $index => $vc) {
-                    $vc->update(['seq' => $index + 1]);
+            DB::transaction(function () use ($videoCategory, $targetPosition, $isChild) {
+                if ($isChild) {
+                    $allItems = VideoCategory::where('parent_id', $videoCategory->parent_id)
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
+                } else {
+                    $allItems = VideoCategory::where('sub_category_id', $videoCategory->sub_category_id)
+                        ->whereNull('parent_id')
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
                 }
 
-                $data['seq'] = $remainingVideoCategories->count() + 1;
-            }
-        }
+                $currentIndex = $allItems->search(fn ($vc) => $vc->id === $videoCategory->id);
+                if ($currentIndex === false) {
+                    return;
+                }
 
-        $videoCategory->update($data);
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($isChild) {
+                        VideoCategory::where('parent_id', $videoCategory->parent_id)
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    } else {
+                        VideoCategory::where('sub_category_id', $videoCategory->sub_category_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($isChild) {
+                        VideoCategory::where('parent_id', $videoCategory->parent_id)
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    } else {
+                        VideoCategory::where('sub_category_id', $videoCategory->sub_category_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $videoCategory->update($data);
+        }
 
         return back();
     }
@@ -574,38 +638,56 @@ class VideoCategoryController extends Controller
 
         $data = ['name' => $request->title];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $subGroups = VideoSubGroup::where('video_id', $subVideo->video_id)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($subVideo, $targetPosition) {
+                $allItems = VideoSubGroup::where('video_id', $subVideo->video_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $subGroups->search(fn ($sg) => $sg->id === $subVideo->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $subGroups->count()) {
-                // SWAP operation
-                $targetSubGroup = $subGroups[$newPosition - 1];
-                $currentSeq = $subVideo->seq;
-                $targetSeq = $targetSubGroup->seq;
-
-                $subVideo->update(['seq' => $targetSeq]);
-                $targetSubGroup->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $subGroups->count()) {
-                // Moving to "Terakhir"
-                $remainingSubGroups = $subGroups->filter(fn ($sg) => $sg->id !== $subVideo->id);
-                foreach ($remainingSubGroups->values() as $index => $sg) {
-                    $sg->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($sg) => $sg->id === $subVideo->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingSubGroups->count() + 1;
-            }
-        }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
 
-        $subVideo->update($data);
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    VideoSubGroup::where('video_id', $subVideo->video_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    VideoSubGroup::where('video_id', $subVideo->video_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $subVideo->update($data);
+        }
 
         return back();
     }
@@ -635,42 +717,53 @@ class VideoCategoryController extends Controller
             'url_audio' => $request->url_audio,
         ];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            // Get all videos in the same group, ordered by current sequence
-            $videos = Video::where('video_sub_group_id', $video->video_sub_group_id)
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($video, $targetPosition) {
+                $allItems = Video::where('video_sub_group_id', $video->video_sub_group_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            // Find current position (1-based index in the ordered list)
-            $currentIndex = $videos->search(fn ($v) => $v->id === $video->id);
-            $currentPosition = $currentIndex + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $videos->count()) {
-                // SWAP operation: swap positions with the item at the target position
-                $targetVideo = $videos[$newPosition - 1]; // Get video at target position (0-based index)
-                $currentSeq = $video->seq;
-                $targetSeq = $targetVideo->seq;
-
-                // Swap the seq values
-                $video->update(['seq' => $targetSeq]);
-                $targetVideo->update(['seq' => $currentSeq]);
-
-                // Don't update $data['seq'] since we already updated directly
-                unset($data['seq']);
-            } elseif ($newPosition > $videos->count()) {
-                // Moving to "Terakhir" (last position)
-                // Remove current item and normalize
-                $remainingVideos = $videos->filter(fn ($v) => $v->id !== $video->id);
-                foreach ($remainingVideos->values() as $index => $v) {
-                    $v->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($v) => $v->id === $video->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                // Set to last position
-                $data['seq'] = $remainingVideos->count() + 1;
-            }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Video::where('video_sub_group_id', $video->video_sub_group_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Video::where('video_sub_group_id', $video->video_sub_group_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
         }
 
         $video->update($data);

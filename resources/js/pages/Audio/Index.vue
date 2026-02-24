@@ -355,6 +355,7 @@ const openSubGroupModal = (type: 'add' | 'edit' | 'delete', formType?: 'group' |
             subGroupForm.title = item.name;
             const pos = (props.subGroups?.findIndex(sg => sg.id === item.id) ?? -1) + 1;
             subGroupForm.seq = pos || null;
+            isAddingAudioItem.value = false;
         } else {
             // Editing an audio item
             subGroupModalType.value = 'editItem';
@@ -362,6 +363,8 @@ const openSubGroupModal = (type: 'add' | 'edit' | 'delete', formType?: 'group' |
             subGroupForm.title = item!.title;
             subGroupForm.url = item!.url || '';
             subGroupForm.duration = item!.duration || '';
+            isAddingAudioItem.value = true; // Set to true so urutanOptions uses parent.audios
+            selectedSubGroupParent.value = parent || null; // Ensure parent is set
             if (parent) {
                 const pos = (parent.audios?.findIndex(a => a.id === item!.id) ?? -1) + 1;
                 subGroupForm.seq = pos || null;

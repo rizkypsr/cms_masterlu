@@ -79,12 +79,13 @@ const categoryForm = useForm({
 
 // Urutan options for topics
 const topicUrutanOptions = computed(() => {
-    const options: { position: number; label: string }[] = [];
+    const options: { position: number; seq: number; label: string }[] = [];
     
     props.topics.forEach((t, index) => {
-        const position = index + 1;
+        const position = index + 1; // Visual position (1, 2, 3...)
         options.push({
             position,
+            seq: t.seq, // Actual database seq value
             label: `${position} - ${t.title}`,
         });
     });
@@ -92,53 +93,69 @@ const topicUrutanOptions = computed(() => {
     const lastPosition = props.topics.length + 1;
     options.push({
         position: lastPosition,
+        seq: lastPosition, // For "Terakhir", we'll handle this specially
         label: `${lastPosition} - (Terakhir)`,
     });
     
     return options;
+});
+
+// Get position from seq for topic dropdown (now seq is already a position)
+const topicSelectedPosition = computed(() => {
+    return topicForm.seq;
 });
 
 // Urutan options for categories
 const categoryUrutanOptions = computed(() => {
-    const options: { position: number; label: string }[] = [];
+    const options: { position: number; seq: number; label: string }[] = [];
     
-    props.topicCategories.forEach((c, index) => {
-        const position = index + 1;
+    let items: TopicCategory[] = [];
+    
+    // If editing a child item, use parent's children array
+    if ((modalType.value === 'editChild' || modalType.value === 'addChild') && selectedParentCategory.value) {
+        items = selectedParentCategory.value.children || [];
+    } else if (modalType.value === 'editCategory' && selectedItem.value && (selectedItem.value as TopicCategory).parent_id) {
+        // If editing a category that has a parent, find the parent and use its children
+        const parent = props.topicCategories.find(c => c.id === (selectedItem.value as TopicCategory).parent_id);
+        items = parent?.children || [];
+    } else {
+        // For parent categories
+        items = props.topicCategories;
+    }
+    
+    items.forEach((c, index) => {
+        const position = index + 1; // Visual position (1, 2, 3...)
         options.push({
             position,
+            seq: c.seq, // Actual database seq value
             label: `${position} - ${c.title}`,
         });
     });
     
-    const lastPosition = props.topicCategories.length + 1;
+    // Always add "Terakhir" option (for both add and edit)
+    const lastPosition = items.length + 1;
     options.push({
         position: lastPosition,
+        seq: lastPosition, // For "Terakhir", we'll handle this specially
         label: `${lastPosition} - (Terakhir)`,
     });
     
     return options;
 });
 
+// Get position from seq for category dropdown (now seq is already a position)
+const categorySelectedPosition = computed(() => {
+    return categoryForm.seq;
+});
+
 const selectTopicUrutan = (position: number) => {
-    const option = topicUrutanOptions.value.find(o => o.position === position);
-    if (option) {
-        const match = option.label.match(/^(\d+) - (.+)$/);
-        if (match) {
-            const seq = parseInt(match[1]);
-            topicForm.seq = seq;
-        }
-    }
+    // Simply use the position number - backend will handle the seq shifting
+    topicForm.seq = position;
 };
 
 const selectCategoryUrutan = (position: number) => {
-    const option = categoryUrutanOptions.value.find(o => o.position === position);
-    if (option) {
-        const match = option.label.match(/^(\d+) - (.+)$/);
-        if (match) {
-            const seq = parseInt(match[1]);
-            categoryForm.seq = seq;
-        }
-    }
+    // Simply use the position number - backend will handle the seq shifting
+    categoryForm.seq = position;
 };
 
 const openModal = (type: typeof modalType.value, item?: Topic | TopicCategory) => {
@@ -158,7 +175,9 @@ const openModal = (type: typeof modalType.value, item?: Topic | TopicCategory) =
             topicForm.title = topic.title;
             topicForm.short_title = topic.short_title;
             topicForm.icon = topic.icon;
-            topicForm.seq = topic.seq;
+            // Find the position of this item in the sorted array
+            const topicIndex = props.topics.findIndex(t => t.id === topic.id);
+            topicForm.seq = topicIndex !== -1 ? topicIndex + 1 : topic.seq;
             break;
         case 'delete':
             modalTitle.value = 'Hapus Topik';
@@ -202,17 +221,35 @@ const openCategoryModal = (type: 'addGroup' | 'addSingle' | 'editCategory' | 'de
             modalTitle.value = 'Edit Category';
             const category = item as TopicCategory;
             categoryForm.title = category.title;
-            categoryForm.seq = category.seq;
             categoryForm.parent_id = category.parent_id;
-            selectedParentCategory.value = null;
+            
+            // Find the position of this item in the appropriate array
+            if (category.parent_id) {
+                // Child category - find position in parent's children
+                selectedParentCategory.value = props.topicCategories.find(c => c.id === category.parent_id) || null;
+                const siblings = selectedParentCategory.value?.children || [];
+                const categoryIndex = siblings.findIndex(c => c.id === category.id);
+                categoryForm.seq = categoryIndex !== -1 ? categoryIndex + 1 : category.seq;
+            } else {
+                // Parent category - find position in topicCategories
+                selectedParentCategory.value = null;
+                const categoryIndex = props.topicCategories.findIndex(c => c.id === category.id);
+                categoryForm.seq = categoryIndex !== -1 ? categoryIndex + 1 : category.seq;
+            }
             break;
         case 'editChild':
             modalTitle.value = 'Edit Item';
             const child = item as TopicCategory;
             categoryForm.title = child.title;
-            categoryForm.seq = child.seq;
             categoryForm.parent_id = child.parent_id;
-            selectedParentCategory.value = null;
+            
+            // Find and set the parent category so urutanOptions can use parent's children
+            selectedParentCategory.value = props.topicCategories.find(c => c.id === child.parent_id) || null;
+            
+            // Find the position of this child in parent's children array
+            const siblings = selectedParentCategory.value?.children || [];
+            const childIndex = siblings.findIndex(c => c.id === child.id);
+            categoryForm.seq = childIndex !== -1 ? childIndex + 1 : child.seq;
             break;
         case 'deleteCategory':
             modalTitle.value = 'Hapus Category';
@@ -466,7 +503,7 @@ const navigateToDetail = (category: TopicCategory) => {
                             <label class="mb-1 block text-sm font-medium text-gray-700">Urutan</label>
                             <div class="relative">
                                 <select
-                                    :value="topicForm.seq"
+                                    :value="topicSelectedPosition"
                                     @change="selectTopicUrutan(Number(($event.target as HTMLSelectElement).value))"
                                     class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
                                 >
@@ -513,7 +550,7 @@ const navigateToDetail = (category: TopicCategory) => {
                             <label class="mb-1 block text-sm font-medium text-gray-700">Urutan</label>
                             <div class="relative">
                                 <select
-                                    :value="categoryForm.seq"
+                                    :value="categorySelectedPosition"
                                     @change="selectCategoryUrutan(Number(($event.target as HTMLSelectElement).value))"
                                     class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
                                 >

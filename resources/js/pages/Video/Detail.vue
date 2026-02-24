@@ -514,12 +514,12 @@ const selectGroup = (groupId: number) => {
 
         <!-- Modal -->
         <Dialog :open="modalOpen" @update:open="modalOpen = $event">
-            <DialogContent class="top-[10%] max-h-[80vh] translate-y-0 overflow-y-auto sm:max-w-md">
+            <DialogContent class="top-[10%] max-h-[80vh] max-w-[95vw] translate-y-0 overflow-x-hidden overflow-y-auto sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>{{ modalTitle }}</DialogTitle>
                 </DialogHeader>
 
-                <div class="py-4">
+                <div class="w-full overflow-hidden py-4">
                     <!-- Add Sub-Video Modal -->
                     <form v-if="modalType === 'add'" @submit.prevent="handleSubVideoSubmit" class="space-y-4">
                         <!-- Group Video Selector -->
@@ -533,7 +533,7 @@ const selectGroup = (groupId: number) => {
                                         :aria-expanded="groupComboboxOpen"
                                         class="w-full justify-between"
                                     >
-                                        {{ selectedGroupLabel }}
+                                        <span class="truncate">{{ selectedGroupLabel }}</span>
                                         <Icon icon="mdi:chevron-down" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -613,7 +613,7 @@ const selectGroup = (groupId: number) => {
                                         :aria-expanded="comboboxOpen"
                                         class="w-full justify-between"
                                     >
-                                        {{ selectedUrutanLabel }}
+                                        <span class="truncate">{{ selectedUrutanLabel }}</span>
                                         <Icon icon="mdi:chevron-down" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -703,7 +703,7 @@ const selectGroup = (groupId: number) => {
                                             :aria-expanded="comboboxOpen"
                                             class="w-full justify-between"
                                         >
-                                            {{ selectedUrutanLabel }}
+                                            <span class="truncate">{{ selectedUrutanLabel }}</span>
                                             <Icon icon="mdi:chevron-down" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>

@@ -7,6 +7,7 @@ use App\Models\BookChapter;
 use App\Models\BookContent;
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class BookCategoryController extends Controller
@@ -142,37 +143,59 @@ class BookCategoryController extends Controller
 
         $data = ['title' => $request->title];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $categories = Category::where('parent_id', $category->parent_id)
-                ->where('type', 'book')
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($category, $targetPosition) {
+                $allItems = Category::where('parent_id', $category->parent_id)
+                    ->where('type', 'book')
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $categories->search(fn ($c) => $c->id === $category->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $categories->count()) {
-                $targetCategory = $categories[$newPosition - 1];
-                $currentSeq = $category->seq;
-                $targetSeq = $targetCategory->seq;
-
-                $category->update(['seq' => $targetSeq]);
-                $targetCategory->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $categories->count()) {
-                $remainingCategories = $categories->filter(fn ($c) => $c->id !== $category->id);
-                foreach ($remainingCategories->values() as $index => $cat) {
-                    $cat->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($c) => $c->id === $category->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingCategories->count() + 1;
-            }
-        }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
 
-        $category->update($data);
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'book')
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'book')
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $category->update($data);
+        }
 
         return back();
     }
@@ -317,32 +340,53 @@ class BookCategoryController extends Controller
             $data['url_pdf'] = config('app.url').'/assets/upload/book/'.$filename;
         }
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            $books = Book::where('book_category_id', $book->book_category_id)
-                ->orderBy('seq')
-                ->get();
+            DB::transaction(function () use ($book, $targetPosition) {
+                $allItems = Book::where('book_category_id', $book->book_category_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $books->search(fn ($b) => $b->id === $book->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $books->count()) {
-                $targetBook = $books[$newPosition - 1];
-                $currentSeq = $book->seq;
-                $targetSeq = $targetBook->seq;
-
-                $book->update(['seq' => $targetSeq]);
-                $targetBook->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $books->count()) {
-                $remainingBooks = $books->filter(fn ($b) => $b->id !== $book->id);
-                foreach ($remainingBooks->values() as $index => $b) {
-                    $b->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($b) => $b->id === $book->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingBooks->count() + 1;
-            }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Book::where('book_category_id', $book->book_category_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Book::where('book_category_id', $book->book_category_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
         }
 
         $book->update($data);
@@ -444,42 +488,78 @@ class BookCategoryController extends Controller
 
         $data = ['title' => $request->title];
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
 
-            if ($chapter->parent_id) {
-                $chapters = BookChapter::where('parent_id', $chapter->parent_id)
-                    ->orderBy('seq')
-                    ->get();
-            } else {
-                $chapters = BookChapter::where('book_id', $chapter->book_id)
-                    ->whereNull('parent_id')
-                    ->orderBy('seq')
-                    ->get();
-            }
-
-            $currentPosition = $chapters->search(fn ($c) => $c->id === $chapter->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $chapters->count()) {
-                $targetChapter = $chapters[$newPosition - 1];
-                $currentSeq = $chapter->seq;
-                $targetSeq = $targetChapter->seq;
-
-                $chapter->update(['seq' => $targetSeq]);
-                $targetChapter->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $chapters->count()) {
-                $remainingChapters = $chapters->filter(fn ($c) => $c->id !== $chapter->id);
-                foreach ($remainingChapters->values() as $index => $c) {
-                    $c->update(['seq' => $index + 1]);
+            DB::transaction(function () use ($chapter, $targetPosition) {
+                if ($chapter->parent_id) {
+                    $allItems = BookChapter::where('parent_id', $chapter->parent_id)
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
+                } else {
+                    $allItems = BookChapter::where('book_id', $chapter->book_id)
+                        ->whereNull('parent_id')
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
                 }
 
-                $data['seq'] = $remainingChapters->count() + 1;
-            }
-        }
+                $currentIndex = $allItems->search(fn ($c) => $c->id === $chapter->id);
+                if ($currentIndex === false) {
+                    return;
+                }
 
-        $chapter->update($data);
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($chapter->parent_id) {
+                        BookChapter::where('parent_id', $chapter->parent_id)
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    } else {
+                        BookChapter::where('book_id', $chapter->book_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($chapter->parent_id) {
+                        BookChapter::where('parent_id', $chapter->parent_id)
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    } else {
+                        BookChapter::where('book_id', $chapter->book_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        } else {
+            $chapter->update($data);
+        }
 
         return back();
     }

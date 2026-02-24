@@ -8,6 +8,7 @@ use App\Models\Topic;
 use App\Models\TopicCategory;
 use App\Models\TopicContent;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class TopicController extends Controller
@@ -56,33 +57,37 @@ class TopicController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
         $validated['category_id'] = $category->id;
 
-        if (! isset($validated['seq'])) {
-            $maxSeq = Topic::where('category_id', $category->id)->max('seq') ?? 0;
-            $validated['seq'] = $maxSeq + 1;
-        } else {
-            $existingTopic = Topic::where('category_id', $category->id)
-                ->where('seq', $validated['seq'])
-                ->first();
+        DB::transaction(function () use ($validated, $category) {
+            if (! isset($validated['seq'])) {
+                // No position specified, add to end
+                $maxSeq = Topic::where('category_id', $category->id)->max('seq') ?? 0;
+                $validated['seq'] = $maxSeq + 1;
+            } else {
+                // Position specified, use shift-based insertion
+                $newPosition = $validated['seq'];
 
-            if ($existingTopic) {
-                $existingTopic->seq = -1;
-                $existingTopic->save();
+                // Get total count
+                $totalCount = Topic::where('category_id', $category->id)->count();
 
-                Topic::create($validated);
+                // Validate and adjust position
+                if ($newPosition > $totalCount + 1) {
+                    $newPosition = $totalCount + 1;
+                    $validated['seq'] = $newPosition;
+                }
 
-                $existingTopic->seq = $validated['seq'];
-                $existingTopic->save();
-
-                return redirect()->back();
+                // Shift existing items to make room for new item
+                Topic::where('category_id', $category->id)
+                    ->where('seq', '>=', $newPosition)
+                    ->increment('seq');
             }
-        }
 
-        Topic::create($validated);
+            Topic::create($validated);
+        });
 
         return redirect()->back();
     }
@@ -94,23 +99,70 @@ class TopicController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
-        if (isset($validated['seq']) && $validated['seq'] != $topic->seq) {
-            $existingTopic = Topic::where('category_id', $category->id)
-                ->where('seq', $validated['seq'])
-                ->where('id', '!=', $id)
-                ->first();
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq']; // This is the visual position (1,2,3,4) from frontend
 
-            if ($existingTopic) {
-                $existingTopic->seq = $topic->seq;
-                $existingTopic->save();
+            DB::transaction(function () use ($targetPosition, $category, $id) {
+                // Get all items ordered by seq to determine positions
+                $allItems = Topic::where('category_id', $category->id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-                $topic->seq = $validated['seq'];
-            } else {
-                $topic->seq = $validated['seq'];
-            }
+                // Find current position of the item being moved
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $id);
+                if ($currentIndex === false) {
+                    return;
+                }
+
+                $currentPosition = $currentIndex + 1; // Convert to 1-indexed position
+                $totalCount = $allItems->count();
+
+                // Validate and adjust target position
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                // No-op if position unchanged
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                // Get the item being moved
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    // Moving DOWN: Get seq of item at target position
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items up (decrement) in the range
+                    Topic::where('category_id', $category->id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    // Move item to target seq
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    // Moving UP: Get seq of item at target position
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items down (increment) in the range
+                    Topic::where('category_id', $category->id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    // Move item to target seq
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            // Remove seq from validated to prevent double update
+            unset($validated['seq']);
         }
 
         $topic->fill($validated);
@@ -137,7 +189,7 @@ class TopicController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
             'have_child' => 'required|integer',
             'parent_id' => 'nullable|integer',
         ]);
@@ -147,47 +199,56 @@ class TopicController extends Controller
         // Determine if this is a child or parent category
         $isChild = isset($validated['parent_id']) && $validated['parent_id'] !== null;
 
-        if (! isset($validated['seq'])) {
-            if ($isChild) {
-                // Get max seq for children of this parent
-                $maxSeq = TopicCategory::where('topics_id', $topicId)
-                    ->where('parent_id', $validated['parent_id'])
-                    ->max('seq') ?? 0;
+        DB::transaction(function () use ($validated, $topicId, $isChild) {
+            if (! isset($validated['seq'])) {
+                // No position specified, add to end
+                if ($isChild) {
+                    $maxSeq = TopicCategory::where('topics_id', $topicId)
+                        ->where('parent_id', $validated['parent_id'])
+                        ->max('seq') ?? 0;
+                } else {
+                    $maxSeq = TopicCategory::where('topics_id', $topicId)
+                        ->whereNull('parent_id')
+                        ->max('seq') ?? 0;
+                }
+                $validated['seq'] = $maxSeq + 1;
             } else {
-                // Get max seq for parent categories
-                $maxSeq = TopicCategory::where('topics_id', $topicId)
-                    ->whereNull('parent_id')
-                    ->max('seq') ?? 0;
+                // Position specified, use shift-based insertion
+                $newPosition = $validated['seq'];
+
+                // Get total count
+                if ($isChild) {
+                    $totalCount = TopicCategory::where('topics_id', $topicId)
+                        ->where('parent_id', $validated['parent_id'])
+                        ->count();
+                } else {
+                    $totalCount = TopicCategory::where('topics_id', $topicId)
+                        ->whereNull('parent_id')
+                        ->count();
+                }
+
+                // Validate and adjust position
+                if ($newPosition > $totalCount + 1) {
+                    $newPosition = $totalCount + 1;
+                    $validated['seq'] = $newPosition;
+                }
+
+                // Shift existing items to make room for new item
+                if ($isChild) {
+                    TopicCategory::where('topics_id', $topicId)
+                        ->where('parent_id', $validated['parent_id'])
+                        ->where('seq', '>=', $newPosition)
+                        ->increment('seq');
+                } else {
+                    TopicCategory::where('topics_id', $topicId)
+                        ->whereNull('parent_id')
+                        ->where('seq', '>=', $newPosition)
+                        ->increment('seq');
+                }
             }
-            $validated['seq'] = $maxSeq + 1;
-        } else {
-            // Handle SWAP logic
-            if ($isChild) {
-                $existingCategory = TopicCategory::where('topics_id', $topicId)
-                    ->where('parent_id', $validated['parent_id'])
-                    ->where('seq', $validated['seq'])
-                    ->first();
-            } else {
-                $existingCategory = TopicCategory::where('topics_id', $topicId)
-                    ->whereNull('parent_id')
-                    ->where('seq', $validated['seq'])
-                    ->first();
-            }
 
-            if ($existingCategory) {
-                $existingCategory->seq = -1;
-                $existingCategory->save();
-
-                TopicCategory::create($validated);
-
-                $existingCategory->seq = $validated['seq'];
-                $existingCategory->save();
-
-                return redirect()->back();
-            }
-        }
-
-        TopicCategory::create($validated);
+            TopicCategory::create($validated);
+        });
 
         return redirect()->back();
     }
@@ -198,37 +259,101 @@ class TopicController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
-        if (isset($validated['seq']) && $validated['seq'] != $category->seq) {
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq']; // This is the visual position (1,2,3,4) from frontend
+
             // Determine if this is a child or parent category
             $isChild = $category->parent_id !== null;
 
-            if ($isChild) {
-                $existingCategory = TopicCategory::where('topics_id', $category->topics_id)
-                    ->where('parent_id', $category->parent_id)
-                    ->where('seq', $validated['seq'])
-                    ->where('id', '!=', $id)
-                    ->first();
-            } else {
-                $existingCategory = TopicCategory::where('topics_id', $category->topics_id)
-                    ->whereNull('parent_id')
-                    ->where('seq', $validated['seq'])
-                    ->where('id', '!=', $id)
-                    ->first();
-            }
+            DB::transaction(function () use ($category, $targetPosition, $isChild, $id) {
+                // Build base query with row-level locking
+                if ($isChild) {
+                    $allItems = TopicCategory::where('topics_id', $category->topics_id)
+                        ->where('parent_id', $category->parent_id)
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
+                } else {
+                    $allItems = TopicCategory::where('topics_id', $category->topics_id)
+                        ->whereNull('parent_id')
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
+                }
 
-            if ($existingCategory) {
-                $existingCategory->seq = $category->seq;
-                $existingCategory->save();
+                // Find current position of the item being moved
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $id);
+                if ($currentIndex === false) {
+                    return;
+                }
 
-                $category->seq = $validated['seq'];
-            } else {
-                $category->seq = $validated['seq'];
-            }
+                $currentPosition = $currentIndex + 1; // Convert to 1-indexed position
+                $totalCount = $allItems->count();
+
+                // Validate and adjust target position
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                // No-op if position unchanged
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                // Get the item being moved
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    // Moving DOWN: Get seq of item at target position
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items up (decrement) in the range
+                    if ($isChild) {
+                        TopicCategory::where('topics_id', $category->topics_id)
+                            ->where('parent_id', $category->parent_id)
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    } else {
+                        TopicCategory::where('topics_id', $category->topics_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    }
+
+                    // Move item to target seq
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    // Moving UP: Get seq of item at target position
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items down (increment) in the range
+                    if ($isChild) {
+                        TopicCategory::where('topics_id', $category->topics_id)
+                            ->where('parent_id', $category->parent_id)
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    } else {
+                        TopicCategory::where('topics_id', $category->topics_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    }
+
+                    // Move item to target seq
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            // Remove seq from validated to prevent double update
+            unset($validated['seq']);
         }
 
+        // Update other fields (title, etc.)
         $category->fill($validated);
         $category->save();
 
@@ -263,34 +388,38 @@ class TopicController extends Controller
     {
         $validated = $request->validate([
             'id_header' => 'required|integer',
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
         $validated['topics_category_id'] = $categoryId;
         $validated['type'] = 'audio'; // Always audio
 
-        if (! isset($validated['seq'])) {
-            $maxSeq = TopicContent::where('topics_category_id', $categoryId)->max('seq') ?? 0;
-            $validated['seq'] = $maxSeq + 1;
-        } else {
-            $existingContent = TopicContent::where('topics_category_id', $categoryId)
-                ->where('seq', $validated['seq'])
-                ->first();
+        DB::transaction(function () use ($validated, $categoryId) {
+            if (! isset($validated['seq'])) {
+                // No position specified, add to end
+                $maxSeq = TopicContent::where('topics_category_id', $categoryId)->max('seq') ?? 0;
+                $validated['seq'] = $maxSeq + 1;
+            } else {
+                // Position specified, use shift-based insertion
+                $newPosition = $validated['seq'];
 
-            if ($existingContent) {
-                $existingContent->seq = -1;
-                $existingContent->save();
+                // Get total count
+                $totalCount = TopicContent::where('topics_category_id', $categoryId)->count();
 
-                TopicContent::create($validated);
+                // Validate and adjust position
+                if ($newPosition > $totalCount + 1) {
+                    $newPosition = $totalCount + 1;
+                    $validated['seq'] = $newPosition;
+                }
 
-                $existingContent->seq = $validated['seq'];
-                $existingContent->save();
-
-                return redirect()->back();
+                // Shift existing items to make room for new item
+                TopicContent::where('topics_category_id', $categoryId)
+                    ->where('seq', '>=', $newPosition)
+                    ->increment('seq');
             }
-        }
 
-        TopicContent::create($validated);
+            TopicContent::create($validated);
+        });
 
         return redirect()->back();
     }
@@ -300,26 +429,49 @@ class TopicController extends Controller
         $content = TopicContent::findOrFail($id);
 
         $validated = $request->validate([
-            'seq' => 'nullable|integer',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
         if (isset($validated['seq']) && $validated['seq'] != $content->seq) {
-            $existingContent = TopicContent::where('topics_category_id', $content->topics_category_id)
-                ->where('seq', $validated['seq'])
-                ->where('id', '!=', $id)
-                ->first();
+            $newPosition = $validated['seq'];
+            $oldPosition = $content->seq;
 
-            if ($existingContent) {
-                $existingContent->seq = $content->seq;
-                $existingContent->save();
+            DB::transaction(function () use ($content, $newPosition, $oldPosition, $id) {
+                // Get total count and validate new position
+                $totalCount = TopicContent::where('topics_category_id', $content->topics_category_id)->count();
 
-                $content->seq = $validated['seq'];
-            } else {
-                $content->seq = $validated['seq'];
-            }
+                if ($newPosition > $totalCount) {
+                    // If position exceeds total, move to last position
+                    $newPosition = $totalCount;
+                }
+
+                // No-op if position unchanged
+                if ($newPosition === $oldPosition) {
+                    return;
+                }
+
+                // Lock the item being moved
+                TopicContent::where('id', $id)->lockForUpdate()->first();
+
+                if ($newPosition > $oldPosition) {
+                    // Moving DOWN: Shift items up (decrement) in the range
+                    TopicContent::where('topics_category_id', $content->topics_category_id)
+                        ->whereBetween('seq', [$oldPosition + 1, $newPosition])
+                        ->decrement('seq');
+                } else {
+                    // Moving UP: Shift items down (increment) in the range
+                    TopicContent::where('topics_category_id', $content->topics_category_id)
+                        ->whereBetween('seq', [$newPosition, $oldPosition - 1])
+                        ->increment('seq');
+                }
+
+                // Update the moved item to new position
+                $content->seq = $newPosition;
+                $content->save();
+            });
+        } else {
+            $content->save();
         }
-
-        $content->save();
 
         return redirect()->back();
     }
