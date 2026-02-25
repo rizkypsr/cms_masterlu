@@ -355,12 +355,25 @@ const openChapterModal = (type: 'add' | 'edit' | 'delete', formType?: 'group' | 
     } else if (type === 'edit') {
         modalTitle.value = 'Edit Chapter';
         chapterForm.title = chapter!.title;
+        
         if (chapter!.parent_id) {
-            const parentChapter = props.chapters?.find(c => c.id === chapter!.parent_id);
+            // This is a child or grandchild chapter
+            // First, search in root chapters
+            let parentChapter = props.chapters?.find(c => c.id === chapter!.parent_id);
+            
+            // If not found in root, search in children of root chapters (for grandchildren)
+            if (!parentChapter) {
+                for (const rootChapter of props.chapters || []) {
+                    parentChapter = rootChapter.children?.find(c => c.id === chapter!.parent_id);
+                    if (parentChapter) break;
+                }
+            }
+            
             selectedChapterParent.value = parentChapter || null;
             const pos = (parentChapter?.children?.findIndex(c => c.id === chapter!.id) ?? -1) + 1;
             chapterForm.seq = pos || null;
         } else {
+            // This is a root chapter
             const pos = (props.chapters?.findIndex(c => c.id === chapter!.id) ?? -1) + 1;
             chapterForm.seq = pos || null;
         }

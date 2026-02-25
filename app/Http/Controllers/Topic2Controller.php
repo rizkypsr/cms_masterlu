@@ -7,6 +7,7 @@ use App\Models\Topic2;
 use App\Models\Topic2Chapter;
 use App\Models\Topic2Content;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class Topic2Controller extends Controller
@@ -122,39 +123,64 @@ class Topic2Controller extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
-            $categories = Category::where('parent_id', $category->parent_id)
-                ->where('type', 'topic2')
-                ->orderBy('seq')
-                ->orderBy('id')
-                ->get();
+            DB::transaction(function () use ($targetPosition, $category) {
+                $allItems = Category::where('parent_id', $category->parent_id)
+                    ->where('type', 'topic2')
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $categories->search(fn ($c) => $c->id === $category->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $categories->count()) {
-                $targetCategory = $categories[$newPosition - 1];
-                $currentSeq = $category->seq;
-                $targetSeq = $targetCategory->seq;
-
-                $category->update(['seq' => $targetSeq]);
-                $targetCategory->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $categories->count()) {
-                $remainingCategories = $categories->filter(fn ($c) => $c->id !== $category->id);
-                foreach ($remainingCategories->values() as $index => $cat) {
-                    $cat->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $category->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingCategories->count() + 1;
-            }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'topic2')
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Category::where('parent_id', $category->parent_id)
+                        ->where('type', 'topic2')
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            unset($validated['seq']);
         }
 
-        $category->update($data);
+        $category->fill($validated);
+        $category->save();
 
         return back();
     }
@@ -212,37 +238,61 @@ class Topic2Controller extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
-            $topics2 = Topic2::where('book_category_id', $topic2->book_category_id)
-                ->orderBy('seq')
-                ->get();
+            DB::transaction(function () use ($targetPosition, $topic2) {
+                $allItems = Topic2::where('book_category_id', $topic2->book_category_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
 
-            $currentPosition = $topics2->search(fn ($t) => $t->id === $topic2->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $topics2->count()) {
-                $targetTopic2 = $topics2[$newPosition - 1];
-                $currentSeq = $topic2->seq;
-                $targetSeq = $targetTopic2->seq;
-
-                $topic2->update(['seq' => $targetSeq]);
-                $targetTopic2->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $topics2->count()) {
-                $remainingTopics2 = $topics2->filter(fn ($t) => $t->id !== $topic2->id);
-                foreach ($remainingTopics2->values() as $index => $t) {
-                    $t->update(['seq' => $index + 1]);
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $topic2->id);
+                if ($currentIndex === false) {
+                    return;
                 }
 
-                $data['seq'] = $remainingTopics2->count() + 1;
-            }
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Topic2::where('book_category_id', $topic2->book_category_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    Topic2::where('book_category_id', $topic2->book_category_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            unset($validated['seq']);
         }
 
-        $topic2->update($data);
+        $topic2->fill($validated);
+        $topic2->save();
 
         return back();
     }
@@ -319,44 +369,83 @@ class Topic2Controller extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if ($request->has('seq')) {
-            $newPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
-            if ($chapter->parent_id) {
-                $chapters = Topic2Chapter::where('parent_id', $chapter->parent_id)
-                    ->orderBy('seq')
-                    ->get();
-            } else {
-                $chapters = Topic2Chapter::where('topics2_id', $chapter->topics2_id)
-                    ->whereNull('parent_id')
-                    ->orderBy('seq')
-                    ->get();
-            }
-
-            $currentPosition = $chapters->search(fn ($c) => $c->id === $chapter->id) + 1;
-
-            if ($newPosition !== $currentPosition && $newPosition <= $chapters->count()) {
-                $targetChapter = $chapters[$newPosition - 1];
-                $currentSeq = $chapter->seq;
-                $targetSeq = $targetChapter->seq;
-
-                $chapter->update(['seq' => $targetSeq]);
-                $targetChapter->update(['seq' => $currentSeq]);
-
-                unset($data['seq']);
-            } elseif ($newPosition > $chapters->count()) {
-                $remainingChapters = $chapters->filter(fn ($c) => $c->id !== $chapter->id);
-                foreach ($remainingChapters->values() as $index => $c) {
-                    $c->update(['seq' => $index + 1]);
+            DB::transaction(function () use ($targetPosition, $chapter) {
+                if ($chapter->parent_id) {
+                    $allItems = Topic2Chapter::where('parent_id', $chapter->parent_id)
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
+                } else {
+                    $allItems = Topic2Chapter::where('topics2_id', $chapter->topics2_id)
+                        ->whereNull('parent_id')
+                        ->orderBy('seq')
+                        ->lockForUpdate()
+                        ->get();
                 }
 
-                $data['seq'] = $remainingChapters->count() + 1;
-            }
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $chapter->id);
+                if ($currentIndex === false) {
+                    return;
+                }
+
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($chapter->parent_id) {
+                        Topic2Chapter::where('parent_id', $chapter->parent_id)
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    } else {
+                        Topic2Chapter::where('topics2_id', $chapter->topics2_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                            ->decrement('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    if ($chapter->parent_id) {
+                        Topic2Chapter::where('parent_id', $chapter->parent_id)
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    } else {
+                        Topic2Chapter::where('topics2_id', $chapter->topics2_id)
+                            ->whereNull('parent_id')
+                            ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                            ->increment('seq');
+                    }
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            unset($validated['seq']);
         }
 
-        $chapter->update($data);
+        $chapter->fill($validated);
+        $chapter->save();
 
         return back();
     }
