@@ -236,7 +236,7 @@ const handleSubmit = () => {
             },
         });
     } else if (modalType.value === 'edit' && selectedItem.value) {
-        form.put(`/video/category/${selectedItem.value.id}`, {
+        form.put(`/audio/category/${selectedItem.value.id}`, {
             onSuccess: () => {
                 modalOpen.value = false;
                 form.reset();
@@ -247,7 +247,7 @@ const handleSubmit = () => {
 
 const handleDelete = () => {
     if (selectedItem.value) {
-        router.delete(`/video/category/${selectedItem.value.id}`, {
+        router.delete(`/audio/category/${selectedItem.value.id}`, {
             onSuccess: () => {
                 modalOpen.value = false;
             },

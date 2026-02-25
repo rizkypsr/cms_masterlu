@@ -141,10 +141,10 @@ class BookCategoryController extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($category, $targetPosition) {
                 $allItems = Category::where('parent_id', $category->parent_id)
@@ -193,9 +193,12 @@ class BookCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $category->update($data);
+
+            unset($validated['seq']);
         }
+
+        $category->fill($validated);
+        $category->save();
 
         return back();
     }
@@ -486,10 +489,10 @@ class BookCategoryController extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($chapter, $targetPosition) {
                 if ($chapter->parent_id) {
@@ -557,9 +560,12 @@ class BookCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $chapter->update($data);
+
+            unset($validated['seq']);
         }
+
+        $chapter->fill($validated);
+        $chapter->save();
 
         return back();
     }

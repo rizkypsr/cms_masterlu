@@ -279,6 +279,7 @@ const openBookModal = (type: 'add' | 'edit' | 'delete', book?: Book, category?: 
         bookForm.url_pdf = null; // File will be re-uploaded if changed
         // Find which category this book belongs to
         const parentCategory = props.categories.find(c => c.books?.some(b => b.id === book!.id));
+        selectedItem.value = parentCategory || null; // Store category for urutan options
         const pos = (parentCategory?.books?.findIndex(b => b.id === book!.id) ?? -1) + 1;
         bookForm.seq = pos || null;
     } else if (type === 'delete') {

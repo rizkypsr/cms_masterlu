@@ -152,11 +152,11 @@ class AudioCategoryController extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $validated = $request->only(['title', 'seq']);
         $lang = $category->languange;
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($category, $targetPosition, $lang) {
                 $allItems = Category::where('parent_id', $category->parent_id)
@@ -208,9 +208,12 @@ class AudioCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $category->update($data);
+
+            unset($validated['seq']);
         }
+
+        $category->fill($validated);
+        $category->save();
 
         return back();
     }
@@ -320,10 +323,10 @@ class AudioCategoryController extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['name' => $request->title];
+        $validated = $request->only(['title', 'seq']);
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($subGroup, $targetPosition) {
                 $allItems = AudioSubGroup::where('audio_category_id', $subGroup->audio_category_id)
@@ -369,9 +372,12 @@ class AudioCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $subGroup->update($data);
+
+            unset($validated['seq']);
         }
+
+        $subGroup->name = $validated['title'];
+        $subGroup->save();
 
         return back();
     }
@@ -393,14 +399,10 @@ class AudioCategoryController extends Controller
             'seq' => 'nullable|integer',
         ]);
 
-        $data = [
-            'title' => $request->title,
-            'url' => $request->url,
-            'duration' => $request->duration,
-        ];
+        $validated = $request->only(['title', 'url', 'duration', 'seq']);
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($audio, $targetPosition) {
                 $allItems = Audio::where('audio_sub_group_id', $audio->audio_sub_group_id)
@@ -446,9 +448,12 @@ class AudioCategoryController extends Controller
 
                 $movingItem->save();
             });
+
+            unset($validated['seq']);
         }
 
-        $audio->update($data);
+        $audio->fill($validated);
+        $audio->save();
 
         return back();
     }
