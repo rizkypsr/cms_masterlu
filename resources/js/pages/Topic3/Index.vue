@@ -417,6 +417,10 @@ const navigateToContent = (chapterId: number) => {
     window.open(`/topic3/chapter/${chapterId}/content`, '_blank');
 };
 
+const navigateToVideo = (chapterId: number) => {
+    window.open(`/topic3/chapter/${chapterId}/video`, '_blank');
+};
+
 // Scroll preservation
 const leftPanelScroll = ref<HTMLElement | null>(null);
 
@@ -651,6 +655,13 @@ const saveLeftPanelScroll = () => {
                                                     <span class="text-sm text-gray-600">{{ grandchild.title }}</span>
                                                     <div class="flex items-center gap-1" @click.stop>
                                                         <button
+                                                            @click="navigateToVideo(grandchild.id)"
+                                                            class="flex h-7 w-7 items-center justify-center rounded bg-[#9b59b6] text-white hover:bg-[#8e44ad]"
+                                                            title="Select Video"
+                                                        >
+                                                            <Icon icon="mdi:video" class="h-4 w-4" />
+                                                        </button>
+                                                        <button
                                                             @click="openChapterModal('edit', undefined, grandchild)"
                                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
                                                             title="Edit"
@@ -677,6 +688,13 @@ const saveLeftPanelScroll = () => {
                                         >
                                             <span class="text-sm text-gray-600">{{ child.title }}</span>
                                             <div class="flex items-center gap-1" @click.stop>
+                                                <button
+                                                    @click="navigateToVideo(child.id)"
+                                                    class="flex h-7 w-7 items-center justify-center rounded bg-[#9b59b6] text-white hover:bg-[#8e44ad]"
+                                                    title="Select Video"
+                                                >
+                                                    <Icon icon="mdi:video" class="h-4 w-4" />
+                                                </button>
                                                 <button
                                                     @click="openChapterModal('edit', undefined, child)"
                                                     class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"

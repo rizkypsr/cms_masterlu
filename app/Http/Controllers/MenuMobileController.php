@@ -26,7 +26,7 @@ class MenuMobileController extends Controller
     public function toggleStatus(MenuMobile $menu)
     {
         $newStatus = $menu->status ? 0 : 1;
-        
+
         $menu->update([
             'status' => $newStatus,
         ]);

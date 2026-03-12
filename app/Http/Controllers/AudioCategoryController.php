@@ -220,7 +220,12 @@ class AudioCategoryController extends Controller
 
     public function destroy(Category $category)
     {
-        $category->delete();
+        DB::transaction(function () use ($category) {
+            // Preserve children by setting their parent_id to null
+            Category::where('parent_id', $category->id)->update(['parent_id' => null]);
+
+            $category->delete();
+        });
 
         return back();
     }

@@ -40,4 +40,9 @@ class Topic3Chapter extends Model
     {
         return $this->hasMany(Topic3Content::class, 'topics3_chapters_id')->orderBy('page');
     }
+
+    public function videos(): HasMany
+    {
+        return $this->hasMany(Topic3Video::class, 'topics3_chapters_id')->orderBy('seq');
+    }
 }

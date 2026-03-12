@@ -530,4 +530,157 @@ class Topic2Controller extends Controller
 
         return back();
     }
+
+    // Video selection for chapter
+    public function videoDetail(Request $request, Topic2Chapter $chapter)
+    {
+        $chapter->load(['topic2' => function ($query) {
+            $query->with('bookCategory');
+        }]);
+
+        $videos = \App\Models\Topic2Video::where('topics2_chapters_id', $chapter->id)
+            ->orderBy('seq')
+            ->get();
+
+        $items = [];
+        foreach ($videos as $video) {
+            $videoCategoryData = \App\Models\VideoCategory::find($video->video_category_id);
+            if ($videoCategoryData) {
+                $items[] = [
+                    'id' => $video->id,
+                    'type' => 'video',
+                    'title' => $videoCategoryData->title,
+                    'seq' => $video->seq,
+                    'video_category' => $videoCategoryData,
+                    'video_category_id' => $videoCategoryData->id,
+                ];
+            }
+        }
+
+        // Get all available video categories where parent_id is not null
+        $availableItems = \App\Models\VideoCategory::whereNotNull('parent_id')
+            ->orderBy('parent_id')
+            ->orderBy('seq')
+            ->get()
+            ->map(function ($videoCategory) {
+                return [
+                    'id' => $videoCategory->id,
+                    'type' => 'video',
+                    'title' => $videoCategory->title,
+                    'parent_id' => $videoCategory->parent_id,
+                ];
+            });
+
+        return Inertia::render('Topic2/VideoDetail', [
+            'chapter' => $chapter,
+            'items' => $items,
+            'availableItems' => $availableItems,
+        ]);
+    }
+
+    public function storeVideo(Request $request, Topic2Chapter $chapter)
+    {
+        $request->validate([
+            'video_category_id' => 'required|exists:video_category,id',
+            'seq' => 'nullable|integer',
+        ]);
+
+        $position = $request->seq;
+
+        $videos = \App\Models\Topic2Video::where('topics2_chapters_id', $chapter->id)
+            ->orderBy('seq')
+            ->get();
+
+        $total = $videos->count();
+
+        foreach ($videos as $index => $video) {
+            $video->update(['seq' => $index + 1]);
+        }
+
+        if (! $position || $position > $total) {
+            $newSeq = $total + 1;
+        } else {
+            \App\Models\Topic2Video::where('topics2_chapters_id', $chapter->id)
+                ->where('seq', '>=', $position)
+                ->increment('seq');
+
+            $newSeq = $position;
+        }
+
+        \App\Models\Topic2Video::create([
+            'topics2_chapters_id' => $chapter->id,
+            'video_category_id' => $request->video_category_id,
+            'seq' => $newSeq,
+        ]);
+
+        return back();
+    }
+
+    public function updateVideo(Request $request, $id)
+    {
+        $topic2Video = \App\Models\Topic2Video::findOrFail($id);
+
+        $request->validate([
+            'seq' => 'nullable|integer',
+        ]);
+
+        if (isset($request->seq)) {
+            $targetPosition = $request->seq;
+
+            DB::transaction(function () use ($topic2Video, $targetPosition) {
+                $allItems = \App\Models\Topic2Video::where('topics2_chapters_id', $topic2Video->topics2_chapters_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
+
+                $currentIndex = $allItems->search(fn ($v) => $v->id === $topic2Video->id);
+                if ($currentIndex === false) {
+                    return;
+                }
+
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    \App\Models\Topic2Video::where('topics2_chapters_id', $topic2Video->topics2_chapters_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    \App\Models\Topic2Video::where('topics2_chapters_id', $topic2Video->topics2_chapters_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+        }
+
+        return back();
+    }
+
+    public function destroyVideo($id)
+    {
+        $topic2Video = \App\Models\Topic2Video::findOrFail($id);
+        $topic2Video->delete();
+
+        return back();
+    }
 }

@@ -5,6 +5,11 @@
       "args": [
         "artisan",
         "boost:mcp"
+      ],
+      "autoApprove": [
+        "list-routes",
+        "database-schema",
+        "database-query"
       ]
     }
   }

@@ -40,4 +40,9 @@ class BookChapter extends Model
     {
         return $this->hasMany(BookContent::class, 'book_chapters_id')->orderBy('page');
     }
+
+    public function videos(): HasMany
+    {
+        return $this->hasMany(BookVideo::class, 'book_chapters_id')->orderBy('seq');
+    }
 }
