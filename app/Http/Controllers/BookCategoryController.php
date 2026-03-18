@@ -658,6 +658,18 @@ class BookCategoryController extends Controller
         return back();
     }
 
+    public function bulkDeleteContent(Request $request)
+    {
+        $request->validate([
+            'content_ids' => 'required|array',
+            'content_ids.*' => 'exists:book_contents,id',
+        ]);
+
+        BookContent::whereIn('id', $request->content_ids)->delete();
+
+        return back();
+    }
+
     // Get available video categories for modal
     public function getVideoCategories()
     {

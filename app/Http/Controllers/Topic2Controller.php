@@ -538,6 +538,18 @@ class Topic2Controller extends Controller
         return back();
     }
 
+    public function bulkDeleteContent(Request $request)
+    {
+        $request->validate([
+            'content_ids' => 'required|array',
+            'content_ids.*' => 'exists:topics2_content,id',
+        ]);
+
+        Topic2Content::whereIn('id', $request->content_ids)->delete();
+
+        return back();
+    }
+
     // Get available video categories for modal
     public function getVideoCategories()
     {

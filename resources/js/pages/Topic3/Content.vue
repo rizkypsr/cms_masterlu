@@ -66,12 +66,10 @@ const pageTitle = computed(() => {
     return parts.join(' / ');
 });
 
-// Pagination
-const itemsPerPage = ref(10);
-const currentPage = ref(1);
+// Search only (no pagination)
 const searchQuery = ref('');
 
-// Filtered and paginated contents
+// Filtered contents
 const filteredContents = computed(() => {
     if (!searchQuery.value) return props.contents;
     const query = searchQuery.value.toLowerCase();
@@ -80,16 +78,6 @@ const filteredContents = computed(() => {
         c.page.toString().includes(query)
     );
 });
-
-const paginatedContents = computed(() => {
-    const start = (currentPage.value - 1) * itemsPerPage.value;
-    const end = start + itemsPerPage.value;
-    return filteredContents.value.slice(start, end);
-});
-
-const totalPages = computed(() => Math.ceil(filteredContents.value.length / itemsPerPage.value));
-const showingFrom = computed(() => filteredContents.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1);
-const showingTo = computed(() => Math.min(currentPage.value * itemsPerPage.value, filteredContents.value.length));
 
 // Modal states
 const modalOpen = ref(false);
@@ -106,12 +94,12 @@ const bulkCategoryForm = useForm({
 });
 const showBulkNewCategoryInput = ref(false);
 
-// Check if content can be selected (no category)
-const canSelectContent = (content: Topic3Content) => {
+// Check if content can be selected for category (no category)
+const canSelectForCategory = (content: Topic3Content) => {
     return !content.category_id;
 };
 
-// Toggle content selection
+// Toggle content selection (for both category and delete)
 const toggleContentSelection = (contentId: number) => {
     const index = selectedContentIds.value.indexOf(contentId);
     if (index > -1) {
@@ -121,31 +109,49 @@ const toggleContentSelection = (contentId: number) => {
     }
 };
 
-// Select all contents without category
-const selectAllWithoutCategory = () => {
-    const contentsWithoutCategory = paginatedContents.value
-        .filter(c => !c.category_id)
-        .map(c => c.id);
-    
-    if (selectedContentIds.value.length === contentsWithoutCategory.length) {
-        // Deselect all
+// Select all contents
+const selectAllContents = () => {
+    const allIds = filteredContents.value.map(c => c.id);
+    if (selectedContentIds.value.length === allIds.length) {
         selectedContentIds.value = [];
     } else {
-        // Select all without category
-        selectedContentIds.value = contentsWithoutCategory;
+        selectedContentIds.value = allIds;
+    }
+};
+
+// Bulk delete handler
+const handleBulkDelete = () => {
+    if (selectedContentIds.value.length === 0) {
+        alert('Pilih minimal satu konten untuk dihapus');
+        return;
+    }
+    if (confirm(`Apakah Anda yakin ingin menghapus ${selectedContentIds.value.length} konten?`)) {
+        router.post(`/topic3/content/bulk-delete`, {
+            content_ids: selectedContentIds.value,
+        }, {
+            onSuccess: () => {
+                selectedContentIds.value = [];
+            },
+        });
     }
 };
 
 // Open bulk category modal
 const openBulkCategoryModal = () => {
-    if (selectedContentIds.value.length === 0) {
+    // Filter to only include items without category
+    const itemsWithoutCategory = selectedContentIds.value.filter(id => {
+        const content = props.contents.find(c => c.id === id);
+        return content && !content.category_id;
+    });
+    
+    if (itemsWithoutCategory.length === 0) {
         alert('Pilih minimal satu konten tanpa kategori');
         return;
     }
     
     modalType.value = 'bulk-category';
     modalTitle.value = 'Tambah Kategori ke Konten Terpilih';
-    bulkCategoryForm.content_ids = [...selectedContentIds.value];
+    bulkCategoryForm.content_ids = [...itemsWithoutCategory];
     bulkCategoryForm.category_id = null;
     bulkCategoryForm.new_category_name = '';
     showBulkNewCategoryInput.value = false;
@@ -229,12 +235,6 @@ const handleDelete = () => {
     }
 };
 
-const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages.value) {
-        currentPage.value = page;
-    }
-};
-
 const goBack = () => {
     router.visit(`/topic3/${props.chapter.topics3_id}`);
 };
@@ -270,6 +270,15 @@ const goBack = () => {
                             Tambah Kategori ({{ selectedContentIds.length }})
                         </Button>
                         <Button 
+                            v-if="selectedContentIds.length > 0"
+                            @click="handleBulkDelete"
+                            class="bg-[#d9534f] hover:bg-[#d43f3a]"
+                            size="sm"
+                        >
+                            <Icon icon="mdi:delete" class="mr-1 h-4 w-4" />
+                            Hapus ({{ selectedContentIds.length }})
+                        </Button>
+                        <Button 
                             @click="openModal('add')"
                             class="bg-[#5cb85c] hover:bg-[#4cae4c]"
                             size="sm"
@@ -281,28 +290,12 @@ const goBack = () => {
                 </div>
 
                 <!-- Controls -->
-                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2">
-                    <div class="flex items-center gap-2">
-                        <select 
-                            v-model="itemsPerPage" 
-                            class="rounded border border-gray-300 px-2 py-1 text-sm"
-                            @change="currentPage = 1"
-                        >
-                            <option :value="10">10</option>
-                            <option :value="25">25</option>
-                            <option :value="50">50</option>
-                            <option :value="100">100</option>
-                        </select>
-                        <span class="text-sm text-gray-600">items/page</span>
-                    </div>
-                    <div>
-                        <Input 
-                            v-model="searchQuery"
-                            placeholder="Search..."
-                            class="h-8 w-48"
-                            @input="currentPage = 1"
-                        />
-                    </div>
+                <div class="flex items-center justify-end border-b border-gray-200 px-4 py-2">
+                    <Input 
+                        v-model="searchQuery"
+                        placeholder="Search..."
+                        class="h-8 w-48"
+                    />
                 </div>
 
                 <!-- Table -->
@@ -313,11 +306,10 @@ const goBack = () => {
                                 <th class="w-12 px-4 py-2 text-left">
                                     <input 
                                         type="checkbox"
-                                        @change="selectAllWithoutCategory"
-                                        :checked="selectedContentIds.length > 0 && selectedContentIds.length === paginatedContents.filter(c => !c.category_id).length"
-                                        :indeterminate="selectedContentIds.length > 0 && selectedContentIds.length < paginatedContents.filter(c => !c.category_id).length"
+                                        @change="selectAllContents"
+                                        :checked="selectedContentIds.length > 0 && selectedContentIds.length === filteredContents.length"
                                         class="h-4 w-4 rounded border-gray-300"
-                                        title="Pilih semua tanpa kategori"
+                                        title="Pilih semua"
                                     />
                                 </th>
                                 <th class="w-20 px-4 py-2 text-left text-sm font-medium text-gray-600"></th>
@@ -333,13 +325,12 @@ const goBack = () => {
                         </thead>
                         <tbody>
                             <tr 
-                                v-for="content in paginatedContents" 
+                                v-for="content in filteredContents" 
                                 :key="content.id"
                                 class="border-b border-gray-100 hover:bg-gray-50"
                             >
                                 <td class="px-4 py-2">
                                     <input 
-                                        v-if="canSelectContent(content)"
                                         type="checkbox"
                                         :checked="selectedContentIds.includes(content.id)"
                                         @change="toggleContentSelection(content.id)"
@@ -373,7 +364,7 @@ const goBack = () => {
                                     <div class="prose prose-sm max-w-none" v-html="content.content"></div>
                                 </td>
                             </tr>
-                            <tr v-if="paginatedContents.length === 0">
+                            <tr v-if="filteredContents.length === 0">
                                 <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">
                                     Tidak ada data
                                 </td>
@@ -385,59 +376,7 @@ const goBack = () => {
                 <!-- Footer -->
                 <div class="flex items-center justify-between border-t border-gray-200 px-4 py-2">
                     <div class="text-sm text-gray-600">
-                        Showing {{ showingFrom }} to {{ showingTo }} of {{ filteredContents.length }} entries
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button
-                            @click="goToPage(1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-left" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(currentPage - 1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-left" class="h-4 w-4" />
-                        </button>
-                        
-                        <template v-for="page in totalPages" :key="page">
-                            <button
-                                v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
-                                @click="goToPage(page)"
-                                :class="[
-                                    'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
-                                    page === currentPage 
-                                        ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
-                                        : 'border-gray-300 bg-white hover:bg-gray-50'
-                                ]"
-                            >
-                                {{ page }}
-                            </button>
-                            <span 
-                                v-else-if="page === currentPage - 2 || page === currentPage + 2"
-                                class="flex h-8 w-8 items-center justify-center text-gray-400"
-                            >
-                                ...
-                            </span>
-                        </template>
-
-                        <button
-                            @click="goToPage(currentPage + 1)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-right" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(totalPages)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-right" class="h-4 w-4" />
-                        </button>
+                        Total {{ filteredContents.length }} entries
                     </div>
                 </div>
             </div>

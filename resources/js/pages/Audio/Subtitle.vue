@@ -57,12 +57,10 @@ const formatTimestamp = (timestamp: string | number): string => {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-// Pagination
-const itemsPerPage = ref(10);
-const currentPage = ref(1);
+// Search only (no pagination)
 const searchQuery = ref('');
 
-// Filtered and paginated subtitles
+// Filtered subtitles
 const filteredSubtitles = computed(() => {
     if (!searchQuery.value) return props.subtitles;
     const query = searchQuery.value.toLowerCase();
@@ -72,15 +70,42 @@ const filteredSubtitles = computed(() => {
     );
 });
 
-const paginatedSubtitles = computed(() => {
-    const start = (currentPage.value - 1) * itemsPerPage.value;
-    const end = start + itemsPerPage.value;
-    return filteredSubtitles.value.slice(start, end);
-});
+// Bulk delete
+const selectedSubtitleIds = ref<number[]>([]);
 
-const totalPages = computed(() => Math.ceil(filteredSubtitles.value.length / itemsPerPage.value));
-const showingFrom = computed(() => filteredSubtitles.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1);
-const showingTo = computed(() => Math.min(currentPage.value * itemsPerPage.value, filteredSubtitles.value.length));
+const toggleSubtitleSelection = (subtitleId: number) => {
+    const index = selectedSubtitleIds.value.indexOf(subtitleId);
+    if (index > -1) {
+        selectedSubtitleIds.value.splice(index, 1);
+    } else {
+        selectedSubtitleIds.value.push(subtitleId);
+    }
+};
+
+const selectAllSubtitles = () => {
+    const allIds = filteredSubtitles.value.map(s => s.id);
+    if (selectedSubtitleIds.value.length === allIds.length) {
+        selectedSubtitleIds.value = [];
+    } else {
+        selectedSubtitleIds.value = allIds;
+    }
+};
+
+const handleBulkDelete = () => {
+    if (selectedSubtitleIds.value.length === 0) {
+        alert('Pilih minimal satu subtitle untuk dihapus');
+        return;
+    }
+    if (confirm(`Apakah Anda yakin ingin menghapus ${selectedSubtitleIds.value.length} subtitle?`)) {
+        router.post(`/audio/subtitle/bulk-delete`, {
+            subtitle_ids: selectedSubtitleIds.value,
+        }, {
+            onSuccess: () => {
+                selectedSubtitleIds.value = [];
+            },
+        });
+    }
+};
 
 // Modal states
 const modalOpen = ref(false);
@@ -235,12 +260,6 @@ const handleUploadSrt = () => {
     });
 };
 
-const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages.value) {
-        currentPage.value = page;
-    }
-};
-
 const exportSrt = () => {
     window.location.href = `/audio/subtitle/${props.audio.id}/export-srt`;
 };
@@ -259,6 +278,15 @@ const exportSrt = () => {
                         <span class="text-sm font-medium text-red-500">{{ audio.title }}</span>
                     </div>
                     <div class="flex items-center gap-2">
+                        <Button 
+                            v-if="selectedSubtitleIds.length > 0"
+                            @click="handleBulkDelete"
+                            class="bg-[#d9534f] hover:bg-[#d43f3a]"
+                            size="sm"
+                        >
+                            <Icon icon="mdi:delete" class="h-4 w-4 lg:mr-1" />
+                            <span class="hidden lg:inline">Hapus ({{ selectedSubtitleIds.length }})</span>
+                        </Button>
                         <Button 
                             @click="openModal('deleteAll')"
                             class="bg-[#d9534f] hover:bg-[#d43f3a]"
@@ -295,28 +323,12 @@ const exportSrt = () => {
                 </div>
 
                 <!-- Controls -->
-                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2">
-                    <div class="flex items-center gap-2">
-                        <select 
-                            v-model="itemsPerPage" 
-                            class="rounded border border-gray-300 px-2 py-1 text-sm"
-                            @change="currentPage = 1"
-                        >
-                            <option :value="10">10</option>
-                            <option :value="25">25</option>
-                            <option :value="50">50</option>
-                            <option :value="100">100</option>
-                        </select>
-                        <span class="text-sm text-gray-600">items/page</span>
-                    </div>
-                    <div>
-                        <Input 
-                            v-model="searchQuery"
-                            placeholder="Search..."
-                            class="h-8 w-48"
-                            @input="currentPage = 1"
-                        />
-                    </div>
+                <div class="flex items-center justify-end border-b border-gray-200 px-4 py-2">
+                    <Input 
+                        v-model="searchQuery"
+                        placeholder="Search..."
+                        class="h-8 w-48"
+                    />
                 </div>
 
                 <!-- Table -->
@@ -324,6 +336,15 @@ const exportSrt = () => {
                     <table class="w-full">
                         <thead class="sticky top-0 bg-gray-50">
                             <tr class="border-b border-gray-200">
+                                <th class="w-12 px-4 py-2 text-left">
+                                    <input 
+                                        type="checkbox"
+                                        @change="selectAllSubtitles"
+                                        :checked="selectedSubtitleIds.length > 0 && selectedSubtitleIds.length === filteredSubtitles.length"
+                                        class="h-4 w-4 rounded border-gray-300"
+                                        title="Pilih semua"
+                                    />
+                                </th>
                                 <th class="w-20 px-4 py-2 text-left text-sm font-medium text-gray-600"></th>
                                 <th class="w-32 px-4 py-2 text-left text-sm font-medium text-gray-600">
                                     <div class="flex items-center gap-1">
@@ -337,10 +358,18 @@ const exportSrt = () => {
                         </thead>
                         <tbody>
                             <tr 
-                                v-for="subtitle in paginatedSubtitles" 
+                                v-for="subtitle in filteredSubtitles" 
                                 :key="subtitle.id"
                                 class="border-b border-gray-100 hover:bg-gray-50"
                             >
+                                <td class="px-4 py-2">
+                                    <input 
+                                        type="checkbox"
+                                        :checked="selectedSubtitleIds.includes(subtitle.id)"
+                                        @change="toggleSubtitleSelection(subtitle.id)"
+                                        class="h-4 w-4 rounded border-gray-300"
+                                    />
+                                </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-1">
                                         <button
@@ -363,8 +392,8 @@ const exportSrt = () => {
                                     <div class="prose prose-sm max-w-none" v-html="subtitle.description"></div>
                                 </td>
                             </tr>
-                            <tr v-if="paginatedSubtitles.length === 0">
-                                <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">
+                            <tr v-if="filteredSubtitles.length === 0">
+                                <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">
                                     Tidak ada data
                                 </td>
                             </tr>
@@ -375,59 +404,7 @@ const exportSrt = () => {
                 <!-- Footer -->
                 <div class="flex items-center justify-between border-t border-gray-200 px-4 py-2">
                     <div class="text-sm text-gray-600">
-                        Showing {{ showingFrom }} to {{ showingTo }} of {{ filteredSubtitles.length }} entries
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button
-                            @click="goToPage(1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-left" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(currentPage - 1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-left" class="h-4 w-4" />
-                        </button>
-                        
-                        <template v-for="page in totalPages" :key="page">
-                            <button
-                                v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
-                                @click="goToPage(page)"
-                                :class="[
-                                    'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
-                                    page === currentPage 
-                                        ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
-                                        : 'border-gray-300 bg-white hover:bg-gray-50'
-                                ]"
-                            >
-                                {{ page }}
-                            </button>
-                            <span 
-                                v-else-if="page === currentPage - 2 || page === currentPage + 2"
-                                class="flex h-8 w-8 items-center justify-center text-gray-400"
-                            >
-                                ...
-                            </span>
-                        </template>
-
-                        <button
-                            @click="goToPage(currentPage + 1)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-right" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(totalPages)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-right" class="h-4 w-4" />
-                        </button>
+                        Total {{ filteredSubtitles.length }} entries
                     </div>
                 </div>
             </div>

@@ -30,6 +30,7 @@ interface TopicContentItem {
     id: number;
     type: 'audio' | 'video';
     title: string;
+    waktu: string;
     seq: number;
     content: any;
 }
@@ -56,16 +57,15 @@ const page = usePage();
 const user = page.props.auth?.user;
 
 // Pagination for main table
-const itemsPerPage = ref(10);
-const currentPage = ref(1);
+// Search for main table
 const searchQuery = ref('');
 
-// Pagination for modal table
+// Pagination for modal table only
 const modalItemsPerPage = ref(10);
 const modalCurrentPage = ref(1);
 const modalSearchQuery = ref('');
 
-// Filtered and paginated items (main table)
+// Filtered items (main table - no pagination, show all)
 const filteredItems = computed(() => {
     if (!searchQuery.value) return props.items;
     const query = searchQuery.value.toLowerCase();
@@ -73,16 +73,6 @@ const filteredItems = computed(() => {
         item.title.toLowerCase().includes(query)
     );
 });
-
-const paginatedItems = computed(() => {
-    const start = (currentPage.value - 1) * itemsPerPage.value;
-    const end = start + itemsPerPage.value;
-    return filteredItems.value.slice(start, end);
-});
-
-const totalPages = computed(() => Math.ceil(filteredItems.value.length / itemsPerPage.value));
-const showingFrom = computed(() => filteredItems.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1);
-const showingTo = computed(() => Math.min(currentPage.value * itemsPerPage.value, filteredItems.value.length));
 
 // Filtered and paginated available items (modal table)
 const filteredAvailableItems = computed(() => {
@@ -103,12 +93,6 @@ const modalTotalPages = computed(() => Math.ceil(filteredAvailableItems.value.le
 const modalShowingFrom = computed(() => filteredAvailableItems.value.length === 0 ? 0 : (modalCurrentPage.value - 1) * modalItemsPerPage.value + 1);
 const modalShowingTo = computed(() => Math.min(modalCurrentPage.value * modalItemsPerPage.value, filteredAvailableItems.value.length));
 
-const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages.value) {
-        currentPage.value = page;
-    }
-};
-
 const goToModalPage = (page: number) => {
     if (page >= 1 && page <= modalTotalPages.value) {
         modalCurrentPage.value = page;
@@ -122,12 +106,61 @@ const modalTitle = ref('');
 const selectedItem = ref<TopicContentItem | null>(null);
 const selectedAvailableItem = ref<AvailableItem | null>(null);
 
+// Bulk delete functionality
+const selectedItems = ref<number[]>([]);
+const selectAll = ref(false);
+
+const toggleSelectAll = () => {
+    if (selectAll.value) {
+        selectedItems.value = filteredItems.value.map(item => item.id);
+    } else {
+        selectedItems.value = [];
+    }
+};
+
+const toggleSelectItem = (itemId: number) => {
+    const index = selectedItems.value.indexOf(itemId);
+    if (index > -1) {
+        selectedItems.value.splice(index, 1);
+    } else {
+        selectedItems.value.push(itemId);
+    }
+    
+    // Update select all checkbox
+    selectAll.value = selectedItems.value.length === filteredItems.value.length;
+};
+
+const bulkDeleteForm = useForm({
+    content_ids: [] as number[],
+});
+
+const handleBulkDelete = () => {
+    if (selectedItems.value.length === 0) return;
+    
+    if (confirm(`Apakah Anda yakin ingin menghapus ${selectedItems.value.length} item?`)) {
+        bulkDeleteForm.content_ids = selectedItems.value;
+        bulkDeleteForm.post('/topic/content/bulk-delete', {
+            onSuccess: () => {
+                selectedItems.value = [];
+                selectAll.value = false;
+            },
+        });
+    }
+};
+
+// Navigate to audio subtitle source
+const navigateToSource = (item: TopicContentItem) => {
+    if (item.content && item.content.audio_id) {
+        const url = `/audio/subtitle/${item.content.audio_id}`;
+        window.open(url, '_blank');
+    }
+};
+
 // Form
 const form = useForm({
     id_header: '' as string | number,
     seq: null as number | null,
 });
-
 const urutanOptions = computed(() => {
     const options: { position: number; label: string }[] = [];
     
@@ -149,7 +182,7 @@ const urutanOptions = computed(() => {
 });
 
 const selectUrutan = (position: number) => {
-    const option = urutanOptions.value.find(o => o.position === position);
+    const option = urutanOptions.value.find((o: { position: number; label: string }) => o.position === position);
     if (option) {
         const match = option.label.match(/^(\d+) - (.+)$/);
         if (match) {
@@ -246,25 +279,22 @@ const handleDelete = () => {
 
                 <!-- Controls -->
                 <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2">
-                    <div class="flex items-center gap-2">
-                        <select 
-                            v-model="itemsPerPage" 
-                            class="rounded border border-gray-300 px-2 py-1 text-sm"
-                            @change="currentPage = 1"
+                    <div class="flex items-center gap-4">
+                        <Button 
+                            v-if="selectedItems.length > 0"
+                            @click="handleBulkDelete"
+                            class="bg-[#d9534f] hover:bg-[#d43f3a]"
+                            size="sm"
                         >
-                            <option :value="10">10</option>
-                            <option :value="25">25</option>
-                            <option :value="50">50</option>
-                            <option :value="100">100</option>
-                        </select>
-                        <span class="text-sm text-gray-600">items/page</span>
+                            <Icon icon="mdi:delete" class="mr-1 h-4 w-4" />
+                            Hapus ({{ selectedItems.length }})
+                        </Button>
                     </div>
                     <div>
                         <Input 
                             v-model="searchQuery"
                             placeholder="Search..."
                             class="h-8 w-48"
-                            @input="currentPage = 1"
                         />
                     </div>
                 </div>
@@ -274,17 +304,35 @@ const handleDelete = () => {
                     <table class="w-full">
                         <thead class="sticky top-0 bg-gray-50">
                             <tr class="border-b border-gray-200">
+                                <th class="w-12 px-4 py-2 text-left">
+                                    <input
+                                        type="checkbox"
+                                        v-model="selectAll"
+                                        @change="toggleSelectAll"
+                                        class="rounded border-gray-300"
+                                    />
+                                </th>
                                 <th class="w-20 px-4 py-2 text-left text-sm font-medium text-gray-600"></th>
                                 <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Title</th>
+                                <th class="w-24 px-4 py-2 text-left text-sm font-medium text-gray-600">Waktu</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr 
-                                v-for="item in paginatedItems" 
+                                v-for="item in filteredItems" 
                                 :key="item.id"
-                                class="border-b border-gray-100 hover:bg-gray-50"
+                                class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                                @click="navigateToSource(item)"
                             >
-                                <td class="px-4 py-2">
+                                <td class="px-4 py-2" @click.stop>
+                                    <input
+                                        type="checkbox"
+                                        :checked="selectedItems.includes(item.id)"
+                                        @change="toggleSelectItem(item.id)"
+                                        class="rounded border-gray-300"
+                                    />
+                                </td>
+                                <td class="px-4 py-2" @click.stop>
                                     <div class="flex items-center gap-1">
                                         <button
                                             @click="openModal('edit', item)"
@@ -301,9 +349,10 @@ const handleDelete = () => {
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-sm text-gray-600">{{ item.title }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.waktu }}</td>
                             </tr>
-                            <tr v-if="paginatedItems.length === 0">
-                                <td colspan="2" class="px-4 py-8 text-center text-sm text-gray-500">
+                            <tr v-if="filteredItems.length === 0">
+                                <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">
                                     Tidak ada data
                                 </td>
                             </tr>
@@ -314,59 +363,7 @@ const handleDelete = () => {
                 <!-- Footer -->
                 <div class="flex items-center justify-between border-t border-gray-200 px-4 py-2">
                     <div class="text-sm text-gray-600">
-                        Showing {{ showingFrom }} to {{ showingTo }} of {{ filteredItems.length }} entries
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button
-                            @click="goToPage(1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-left" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(currentPage - 1)"
-                            :disabled="currentPage === 1"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-left" class="h-4 w-4" />
-                        </button>
-                        
-                        <template v-for="page in totalPages" :key="page">
-                            <button
-                                v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
-                                @click="goToPage(page)"
-                                :class="[
-                                    'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
-                                    page === currentPage 
-                                        ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
-                                        : 'border-gray-300 bg-white hover:bg-gray-50'
-                                ]"
-                            >
-                                {{ page }}
-                            </button>
-                            <span 
-                                v-else-if="page === currentPage - 2 || page === currentPage + 2"
-                                class="flex h-8 w-8 items-center justify-center text-gray-400"
-                            >
-                                ...
-                            </span>
-                        </template>
-
-                        <button
-                            @click="goToPage(currentPage + 1)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-right" class="h-4 w-4" />
-                        </button>
-                        <button
-                            @click="goToPage(totalPages)"
-                            :disabled="currentPage === totalPages"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Icon icon="mdi:chevron-double-right" class="h-4 w-4" />
-                        </button>
+                        Showing {{ filteredItems.length }} entries
                     </div>
                 </div>
             </div>

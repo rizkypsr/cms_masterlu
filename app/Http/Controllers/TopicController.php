@@ -489,6 +489,18 @@ class TopicController extends Controller
         return redirect()->back();
     }
 
+    public function bulkDeleteContent(Request $request)
+    {
+        $request->validate([
+            'content_ids' => 'required|array',
+            'content_ids.*' => 'exists:topics_content,id',
+        ]);
+
+        TopicContent::whereIn('id', $request->content_ids)->delete();
+
+        return back();
+    }
+
     public function detail(Request $request, $categoryId)
     {
         $category = Category::first();
@@ -516,7 +528,8 @@ class TopicController extends Controller
                 $items[] = [
                     'id' => $content->id,
                     'type' => 'audio',
-                    'title' => $displayTitle.' - '.$formattedTime,
+                    'title' => $displayTitle,
+                    'waktu' => $formattedTime,
                     'seq' => $content->seq,
                     'content' => $subtitle,
                 ];

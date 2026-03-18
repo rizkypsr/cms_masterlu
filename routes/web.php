@@ -85,6 +85,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('audio/subtitle/{audio}/export-srt', [AudioCategoryController::class, 'exportSrtFile'])->name('audio.subtitle.export-srt');
     Route::put('audio/subtitle/item/{subtitle}', [AudioCategoryController::class, 'updateSubtitle'])->name('audio.subtitle.update');
     Route::delete('audio/subtitle/item/{subtitle}', [AudioCategoryController::class, 'destroySubtitle'])->name('audio.subtitle.destroy');
+    Route::post('audio/subtitle/bulk-delete', [AudioCategoryController::class, 'bulkDeleteSubtitle'])->name('audio.subtitle.bulk-delete');
     Route::delete('audio/subtitle/{audio}/all', [AudioCategoryController::class, 'destroyAllSubtitles'])->name('audio.subtitle.destroy-all');
 
     // Topic Routes (without lang parameter)
@@ -103,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('topic/category/{category}/content', [TopicController::class, 'storeContent'])->name('topic.content.store');
     Route::put('topic/content/{content}', [TopicController::class, 'updateContent'])->name('topic.content.update');
     Route::delete('topic/content/{content}', [TopicController::class, 'destroyContent'])->name('topic.content.destroy');
+    Route::post('topic/content/bulk-delete', [TopicController::class, 'bulkDeleteContent'])->name('topic.content.bulk-delete');
 
     // Topic2 Routes (like Book structure)
     Route::get('topic2/{topic2?}', [Topic2Controller::class, 'index'])->name('topic2.index');
@@ -125,6 +127,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('topic2/chapter/{chapter}/content', [Topic2Controller::class, 'storeContent'])->name('topic2.content.store');
     Route::put('topic2/content/{content}', [Topic2Controller::class, 'updateContent'])->name('topic2.content.update');
     Route::delete('topic2/content/{content}', [Topic2Controller::class, 'destroyContent'])->name('topic2.content.destroy');
+    Route::post('topic2/content/bulk-delete', [Topic2Controller::class, 'bulkDeleteContent'])->name('topic2.content.bulk-delete');
 
     // Topic2 Video
     Route::get('topic2/video-categories', [Topic2Controller::class, 'getVideoCategories'])->name('topic2.video-categories');
@@ -151,6 +154,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('topic3/chapter/{chapter}/content', [App\Http\Controllers\Topic3Controller::class, 'storeContent'])->name('topic3.content.store');
     Route::put('topic3/content/{content}', [App\Http\Controllers\Topic3Controller::class, 'updateContent'])->name('topic3.content.update');
     Route::delete('topic3/content/{content}', [App\Http\Controllers\Topic3Controller::class, 'destroyContent'])->name('topic3.content.destroy');
+    Route::post('topic3/content/bulk-delete', [App\Http\Controllers\Topic3Controller::class, 'bulkDeleteContent'])->name('topic3.content.bulk-delete');
     Route::post('topic3/content/bulk-assign-category', [App\Http\Controllers\Topic3Controller::class, 'bulkAssignCategory'])->name('topic3.content.bulk-assign-category');
 
     // Topic3 Content Category CRUD
@@ -186,6 +190,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('book/chapter/{chapter}/content', [BookCategoryController::class, 'storeContent'])->name('book.content.store');
     Route::put('book/content/{content}', [BookCategoryController::class, 'updateContent'])->name('book.content.update');
     Route::delete('book/content/{content}', [BookCategoryController::class, 'destroyContent'])->name('book.content.destroy');
+    Route::post('book/content/bulk-delete', [BookCategoryController::class, 'bulkDeleteContent'])->name('book.content.bulk-delete');
 
     // Book Video
     Route::get('book/video-categories', [BookCategoryController::class, 'getVideoCategories'])->name('book.video-categories');

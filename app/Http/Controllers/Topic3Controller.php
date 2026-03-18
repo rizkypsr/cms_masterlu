@@ -576,6 +576,18 @@ class Topic3Controller extends Controller
         return back();
     }
 
+    public function bulkDeleteContent(Request $request)
+    {
+        $request->validate([
+            'content_ids' => 'required|array',
+            'content_ids.*' => 'exists:topics3_content,id',
+        ]);
+
+        Topic3Content::whereIn('id', $request->content_ids)->delete();
+
+        return back();
+    }
+
     // Content Category CRUD
     public function storeContentCategory(Request $request)
     {

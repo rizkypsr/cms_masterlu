@@ -670,6 +670,18 @@ class AudioCategoryController extends Controller
         return back();
     }
 
+    public function bulkDeleteSubtitle(Request $request)
+    {
+        $request->validate([
+            'subtitle_ids' => 'required|array',
+            'subtitle_ids.*' => 'exists:audio_subtitle,id',
+        ]);
+
+        AudioSubtitle::whereIn('id', $request->subtitle_ids)->delete();
+
+        return back();
+    }
+
     public function destroyAllSubtitles(Audio $audio)
     {
         AudioSubtitle::where('audio_id', $audio->id)->delete();
