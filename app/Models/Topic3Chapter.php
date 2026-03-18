@@ -19,6 +19,7 @@ class Topic3Chapter extends Model
         'description',
         'seq',
         'have_child',
+        'video_category_id',
     ];
 
     public function topic3(): BelongsTo
@@ -41,8 +42,8 @@ class Topic3Chapter extends Model
         return $this->hasMany(Topic3Content::class, 'topics3_chapters_id')->orderBy('page');
     }
 
-    public function videos(): HasMany
+    public function videoCategory(): BelongsTo
     {
-        return $this->hasMany(Topic3Video::class, 'topics3_chapters_id')->orderBy('seq');
+        return $this->belongsTo(VideoCategory::class, 'video_category_id');
     }
 }

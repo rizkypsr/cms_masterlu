@@ -126,11 +126,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('topic2/content/{content}', [Topic2Controller::class, 'updateContent'])->name('topic2.content.update');
     Route::delete('topic2/content/{content}', [Topic2Controller::class, 'destroyContent'])->name('topic2.content.destroy');
 
-    // Topic2 Video Selection Page
-    Route::get('topic2/chapter/{chapter}/video', [Topic2Controller::class, 'videoDetail'])->name('topic2.video.detail');
-    Route::post('topic2/chapter/{chapter}/video', [Topic2Controller::class, 'storeVideo'])->name('topic2.video.store');
-    Route::put('topic2/video/{id}', [Topic2Controller::class, 'updateVideo'])->name('topic2.video.update');
-    Route::delete('topic2/video/{id}', [Topic2Controller::class, 'destroyVideo'])->name('topic2.video.destroy');
+    // Topic2 Video
+    Route::get('topic2/video-categories', [Topic2Controller::class, 'getVideoCategories'])->name('topic2.video-categories');
+    Route::put('topic2/chapter/{chapter}/video', [Topic2Controller::class, 'updateChapterVideo'])->name('topic2.chapter.video.update');
 
     // Topic3 Routes (like Topic2 but with content categories)
     Route::get('topic3/{topic3?}', [App\Http\Controllers\Topic3Controller::class, 'index'])->name('topic3.index');
@@ -160,11 +158,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('topic3/content-category/{category}', [App\Http\Controllers\Topic3Controller::class, 'updateContentCategory'])->name('topic3.content-category.update');
     Route::delete('topic3/content-category/{category}', [App\Http\Controllers\Topic3Controller::class, 'destroyContentCategory'])->name('topic3.content-category.destroy');
 
-    // Topic3 Video Selection Page
-    Route::get('topic3/chapter/{chapter}/video', [App\Http\Controllers\Topic3Controller::class, 'videoDetail'])->name('topic3.video.detail');
-    Route::post('topic3/chapter/{chapter}/video', [App\Http\Controllers\Topic3Controller::class, 'storeVideo'])->name('topic3.video.store');
-    Route::put('topic3/video/{id}', [App\Http\Controllers\Topic3Controller::class, 'updateVideo'])->name('topic3.video.update');
-    Route::delete('topic3/video/{id}', [App\Http\Controllers\Topic3Controller::class, 'destroyVideo'])->name('topic3.video.destroy');
+    // Topic3 Video
+    Route::get('topic3/video-categories', [App\Http\Controllers\Topic3Controller::class, 'getVideoCategories'])->name('topic3.video-categories');
+    Route::put('topic3/chapter/{chapter}/video', [App\Http\Controllers\Topic3Controller::class, 'updateChapterVideo'])->name('topic3.chapter.video.update');
 
     // Book Routes
     Route::get('book/{book?}', [BookCategoryController::class, 'index'])->name('book.index');
@@ -191,11 +187,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('book/content/{content}', [BookCategoryController::class, 'updateContent'])->name('book.content.update');
     Route::delete('book/content/{content}', [BookCategoryController::class, 'destroyContent'])->name('book.content.destroy');
 
-    // Book Video Selection Page
-    Route::get('book/chapter/{chapter}/video', [BookCategoryController::class, 'videoDetail'])->name('book.video.detail');
-    Route::post('book/chapter/{chapter}/video', [BookCategoryController::class, 'storeVideo'])->name('book.video.store');
-    Route::put('book/video/{id}', [BookCategoryController::class, 'updateVideo'])->name('book.video.update');
-    Route::delete('book/video/{id}', [BookCategoryController::class, 'destroyVideo'])->name('book.video.destroy');
+    // Book Video
+    Route::get('book/video-categories', [BookCategoryController::class, 'getVideoCategories'])->name('book.video-categories');
+    Route::put('book/chapter/{chapter}/video', [BookCategoryController::class, 'updateChapterVideo'])->name('book.chapter.video.update');
 
     // Community Playlist Routes
     Route::get('community-playlist', [App\Http\Controllers\CommunityPlaylistController::class, 'index'])->name('community-playlist.index');

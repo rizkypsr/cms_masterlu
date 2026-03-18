@@ -43,18 +43,25 @@ class BookCategoryController extends Controller
                 ->whereNull('parent_id')
                 ->with(['children' => function ($query) {
                     $query->with(['children' => function ($q) {
-                        $q->orderBy('seq');
-                    }])->orderBy('seq');
-                }])
+                        $q->with('videoCategory')->orderBy('seq');
+                    }, 'videoCategory'])->orderBy('seq');
+                }, 'videoCategory'])
                 ->orderBy('seq')
                 ->get();
         }
+
+        // Get video categories for modal
+        $videoCategories = \App\Models\VideoCategory::whereNotNull('parent_id')
+            ->orderBy('parent_id')
+            ->orderBy('seq')
+            ->get();
 
         return Inertia::render('Book/Index', [
             'categories' => $categories,
             'storeUrl' => '/book/category',
             'chapters' => $chapters,
             'selectedBook' => $selectedBook,
+            'videoCategories' => $videoCategories,
         ]);
     }
 
@@ -651,153 +658,27 @@ class BookCategoryController extends Controller
         return back();
     }
 
-    // Video selection for chapter
-    public function videoDetail(Request $request, BookChapter $chapter)
+    // Get available video categories for modal
+    public function getVideoCategories()
     {
-        $chapter->load(['book.category']);
-
-        $videos = \App\Models\BookVideo::where('book_chapters_id', $chapter->id)
-            ->orderBy('seq')
-            ->get();
-
-        $items = [];
-        foreach ($videos as $video) {
-            $videoCategoryData = \App\Models\VideoCategory::find($video->video_category_id);
-            if ($videoCategoryData) {
-                $items[] = [
-                    'id' => $video->id,
-                    'type' => 'video',
-                    'title' => $videoCategoryData->title,
-                    'seq' => $video->seq,
-                    'video_category' => $videoCategoryData,
-                    'video_category_id' => $videoCategoryData->id,
-                ];
-            }
-        }
-
-        // Get all available video categories where parent_id is not null
-        $availableItems = \App\Models\VideoCategory::whereNotNull('parent_id')
+        $videoCategories = \App\Models\VideoCategory::whereNotNull('parent_id')
             ->orderBy('parent_id')
             ->orderBy('seq')
-            ->get()
-            ->map(function ($videoCategory) {
-                return [
-                    'id' => $videoCategory->id,
-                    'type' => 'video',
-                    'title' => $videoCategory->title,
-                    'parent_id' => $videoCategory->parent_id,
-                ];
-            });
-
-        return Inertia::render('Book/VideoDetail', [
-            'chapter' => $chapter,
-            'items' => $items,
-            'availableItems' => $availableItems,
-        ]);
-    }
-
-    public function storeVideo(Request $request, BookChapter $chapter)
-    {
-        $request->validate([
-            'video_category_id' => 'required|exists:video_category,id',
-            'seq' => 'nullable|integer',
-        ]);
-
-        $position = $request->seq;
-
-        $videos = \App\Models\BookVideo::where('book_chapters_id', $chapter->id)
-            ->orderBy('seq')
             ->get();
 
-        $total = $videos->count();
-
-        foreach ($videos as $index => $video) {
-            $video->update(['seq' => $index + 1]);
-        }
-
-        if (! $position || $position > $total) {
-            $newSeq = $total + 1;
-        } else {
-            \App\Models\BookVideo::where('book_chapters_id', $chapter->id)
-                ->where('seq', '>=', $position)
-                ->increment('seq');
-
-            $newSeq = $position;
-        }
-
-        \App\Models\BookVideo::create([
-            'book_chapters_id' => $chapter->id,
-            'video_category_id' => $request->video_category_id,
-            'seq' => $newSeq,
-        ]);
-
-        return back();
+        return response()->json($videoCategories);
     }
 
-    public function updateVideo(Request $request, $id)
+    // Update chapter's video category
+    public function updateChapterVideo(Request $request, BookChapter $chapter)
     {
-        $bookVideo = \App\Models\BookVideo::findOrFail($id);
-
         $request->validate([
-            'seq' => 'nullable|integer',
+            'video_category_id' => 'nullable|exists:video_category,id',
         ]);
 
-        if (isset($request->seq)) {
-            $targetPosition = $request->seq;
-
-            DB::transaction(function () use ($bookVideo, $targetPosition) {
-                $allItems = \App\Models\BookVideo::where('book_chapters_id', $bookVideo->book_chapters_id)
-                    ->orderBy('seq')
-                    ->lockForUpdate()
-                    ->get();
-
-                $currentIndex = $allItems->search(fn ($v) => $v->id === $bookVideo->id);
-                if ($currentIndex === false) {
-                    return;
-                }
-
-                $currentPosition = $currentIndex + 1;
-                $totalCount = $allItems->count();
-
-                if ($targetPosition > $totalCount) {
-                    $targetPosition = $totalCount;
-                }
-
-                if ($targetPosition === $currentPosition) {
-                    return;
-                }
-
-                $movingItem = $allItems[$currentIndex];
-
-                if ($targetPosition > $currentPosition) {
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
-
-                    \App\Models\BookVideo::where('book_chapters_id', $bookVideo->book_chapters_id)
-                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
-                        ->decrement('seq');
-
-                    $movingItem->seq = $targetSeq;
-                } else {
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
-
-                    \App\Models\BookVideo::where('book_chapters_id', $bookVideo->book_chapters_id)
-                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
-                        ->increment('seq');
-
-                    $movingItem->seq = $targetSeq;
-                }
-
-                $movingItem->save();
-            });
-        }
-
-        return back();
-    }
-
-    public function destroyVideo($id)
-    {
-        $bookVideo = \App\Models\BookVideo::findOrFail($id);
-        $bookVideo->delete();
+        $chapter->update([
+            'video_category_id' => $request->video_category_id,
+        ]);
 
         return back();
     }

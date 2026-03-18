@@ -52,6 +52,7 @@ interface BookChapter {
     seq: number;
     have_child: number;
     parent_id: number | null;
+    video_category_id?: number | null;
     children?: BookChapter[];
 }
 
@@ -60,6 +61,7 @@ const props = defineProps<{
     storeUrl: string;
     chapters?: BookChapter[];
     selectedBook?: Book | null;
+    videoCategories: any[];
 }>();
 
 const page = usePage();
@@ -452,8 +454,65 @@ const navigateToContent = (chapterId: number) => {
     window.open(`/book/chapter/${chapterId}/content`, '_blank');
 };
 
-const navigateToVideo = (chapterId: number) => {
-    window.open(`/book/chapter/${chapterId}/video`, '_blank');
+// Video modal states
+const videoModalOpen = ref(false);
+const selectedChapterForVideo = ref<BookChapter | null>(null);
+const selectedVideoCategory = ref<any | null>(null);
+
+// Video modal pagination
+const videoModalItemsPerPage = ref(10);
+const videoModalCurrentPage = ref(1);
+const videoModalSearchQuery = ref('');
+
+// Filtered and paginated video categories
+const filteredVideoCategories = computed(() => {
+    if (!videoModalSearchQuery.value) return props.videoCategories;
+    const query = videoModalSearchQuery.value.toLowerCase();
+    return props.videoCategories.filter(video => 
+        video.title.toLowerCase().includes(query)
+    );
+});
+
+const paginatedVideoCategories = computed(() => {
+    const start = (videoModalCurrentPage.value - 1) * videoModalItemsPerPage.value;
+    const end = start + videoModalItemsPerPage.value;
+    return filteredVideoCategories.value.slice(start, end);
+});
+
+const videoModalTotalPages = computed(() => Math.ceil(filteredVideoCategories.value.length / videoModalItemsPerPage.value));
+const videoModalShowingFrom = computed(() => filteredVideoCategories.value.length === 0 ? 0 : (videoModalCurrentPage.value - 1) * videoModalItemsPerPage.value + 1);
+const videoModalShowingTo = computed(() => Math.min(videoModalCurrentPage.value * videoModalItemsPerPage.value, filteredVideoCategories.value.length));
+
+const goToVideoModalPage = (page: number) => {
+    if (page >= 1 && page <= videoModalTotalPages.value) {
+        videoModalCurrentPage.value = page;
+    }
+};
+
+const openVideoModal = (chapter: BookChapter) => {
+    selectedChapterForVideo.value = chapter;
+    selectedVideoCategory.value = null;
+    videoModalSearchQuery.value = '';
+    videoModalCurrentPage.value = 1;
+    videoModalOpen.value = true;
+};
+
+const selectVideoCategory = (video: any) => {
+    selectedVideoCategory.value = video;
+};
+
+const handleVideoSubmit = () => {
+    if (!selectedChapterForVideo.value) return;
+    
+    router.put(`/book/chapter/${selectedChapterForVideo.value.id}/video`, {
+        video_category_id: selectedVideoCategory.value?.id || null,
+    }, {
+        onSuccess: () => {
+            videoModalOpen.value = false;
+            selectedChapterForVideo.value = null;
+            selectedVideoCategory.value = null;
+        },
+    });
 };
 
 // Scroll preservation
@@ -690,7 +749,7 @@ const saveLeftPanelScroll = () => {
                                                     <span class="text-sm text-gray-600">{{ grandchild.title }}</span>
                                                     <div class="flex items-center gap-1" @click.stop>
                                                         <button
-                                                            @click="navigateToVideo(grandchild.id)"
+                                                            @click="openVideoModal(grandchild)"
                                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#9b59b6] text-white hover:bg-[#8e44ad]"
                                                             title="Select Video"
                                                         >
@@ -724,7 +783,7 @@ const saveLeftPanelScroll = () => {
                                             <span class="text-sm text-gray-600">{{ child.title }}</span>
                                             <div class="flex items-center gap-1" @click.stop>
                                                 <button
-                                                    @click="navigateToVideo(child.id)"
+                                                    @click="openVideoModal(child)"
                                                     class="flex h-7 w-7 items-center justify-center rounded bg-[#9b59b6] text-white hover:bg-[#8e44ad]"
                                                     title="Select Video"
                                                 >
@@ -990,6 +1049,152 @@ const saveLeftPanelScroll = () => {
                             <Button variant="outline" @click="modalOpen = false">Batal</Button>
                             <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="modalContext === 'chapter' ? handleChapterDelete() : (modalContext === 'book' ? handleBookDelete() : handleDelete())">
                                 Hapus
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Video Selection Modal -->
+        <Dialog :open="videoModalOpen" @update:open="videoModalOpen = $event">
+            <DialogContent class="top-[5%] max-h-[90vh] translate-y-0 flex flex-col overflow-hidden sm:max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Pilih Video untuk: {{ selectedChapterForVideo?.title }}</DialogTitle>
+                </DialogHeader>
+
+                <div class="flex-1 overflow-hidden py-4">
+                    <div class="flex h-full flex-col space-y-4">
+                        <!-- Current selection -->
+                        <div v-if="selectedChapterForVideo?.video_category_id" class="rounded bg-blue-50 p-3">
+                            <p class="text-sm font-medium text-blue-900">Video saat ini:</p>
+                            <a 
+                                :href="`/video/video-category/${selectedChapterForVideo.video_category_id}`"
+                                target="_blank"
+                                class="text-sm text-blue-700 hover:underline cursor-pointer"
+                            >
+                                {{ videoCategories.find(v => v.id === selectedChapterForVideo?.video_category_id)?.title || 'Unknown' }}
+                            </a>
+                        </div>
+
+                        <!-- Controls -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <select 
+                                    v-model="videoModalItemsPerPage" 
+                                    class="rounded border border-gray-300 px-2 py-1 text-sm"
+                                    @change="videoModalCurrentPage = 1"
+                                >
+                                    <option :value="10">10</option>
+                                    <option :value="25">25</option>
+                                    <option :value="50">50</option>
+                                </select>
+                                <span class="text-sm text-gray-600">items/page</span>
+                            </div>
+                            <Input 
+                                v-model="videoModalSearchQuery"
+                                placeholder="Search..."
+                                class="h-8 w-48"
+                                @input="videoModalCurrentPage = 1"
+                            />
+                        </div>
+
+                        <!-- Table -->
+                        <div class="flex-1 overflow-auto rounded border">
+                            <table class="w-full">
+                                <thead class="sticky top-0 bg-gray-50">
+                                    <tr class="border-b border-gray-200">
+                                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Title</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr 
+                                        v-for="video in paginatedVideoCategories" 
+                                        :key="video.id"
+                                        @click="selectVideoCategory(video)"
+                                        :class="[
+                                            'cursor-pointer border-b border-gray-100 hover:bg-gray-50',
+                                            selectedVideoCategory?.id === video.id ? 'bg-blue-50' : ''
+                                        ]"
+                                    >
+                                        <td class="px-4 py-2 text-sm text-gray-600">{{ video.title }}</td>
+                                    </tr>
+                                    <tr v-if="paginatedVideoCategories.length === 0">
+                                        <td class="px-4 py-8 text-center text-sm text-gray-500">
+                                            Tidak ada data
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="flex items-center justify-between border-t pt-2">
+                            <div class="text-sm text-gray-600">
+                                Showing {{ videoModalShowingFrom }} to {{ videoModalShowingTo }} of {{ filteredVideoCategories.length }} entries
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    @click="goToVideoModalPage(videoModalCurrentPage - 1)"
+                                    :disabled="videoModalCurrentPage === 1"
+                                    class="flex h-8 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    Previous
+                                </button>
+                                
+                                <template v-for="page in videoModalTotalPages" :key="page">
+                                    <button
+                                        type="button"
+                                        v-if="page === 1 || page === videoModalTotalPages || (page >= videoModalCurrentPage - 1 && page <= videoModalCurrentPage + 1)"
+                                        @click="goToVideoModalPage(page)"
+                                        :class="[
+                                            'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
+                                            page === videoModalCurrentPage 
+                                                ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
+                                                : 'border-gray-300 bg-white hover:bg-gray-50'
+                                        ]"
+                                    >
+                                        {{ page }}
+                                    </button>
+                                    <span 
+                                        v-else-if="page === videoModalCurrentPage - 2 || page === videoModalCurrentPage + 2"
+                                        class="flex h-8 w-8 items-center justify-center text-gray-400"
+                                    >
+                                        ...
+                                    </span>
+                                </template>
+
+                                <button
+                                    type="button"
+                                    @click="goToVideoModalPage(videoModalCurrentPage + 1)"
+                                    :disabled="videoModalCurrentPage === videoModalTotalPages"
+                                    class="flex h-8 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" @click="videoModalOpen = false">Batal</Button>
+                            <Button 
+                                v-if="selectedChapterForVideo?.video_category_id"
+                                type="button"
+                                variant="outline"
+                                class="border-red-500 text-red-500 hover:bg-red-50"
+                                @click="handleVideoSubmit()"
+                            >
+                                Hapus Video
+                            </Button>
+                            <Button 
+                                type="button"
+                                class="bg-[#5cb85c] hover:bg-[#4cae4c]" 
+                                :disabled="!selectedVideoCategory"
+                                @click="handleVideoSubmit()"
+                            >
+                                Pilih Video
                             </Button>
                         </div>
                     </div>
