@@ -79,13 +79,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('audio/audio-child/{audio}', [AudioCategoryController::class, 'destroyAudioChild'])->name('audio.audio-child.destroy');
 
     // Audio Subtitle CRUD
+    Route::post('audio/subtitle/bulk-delete', [AudioCategoryController::class, 'bulkDeleteSubtitle'])->name('audio.subtitle.bulk-delete');
     Route::get('audio/subtitle/{audio}', [AudioCategoryController::class, 'showSubtitle'])->name('audio.subtitle.show');
     Route::post('audio/subtitle/{audio}', [AudioCategoryController::class, 'storeSubtitle'])->name('audio.subtitle.store');
     Route::post('audio/subtitle/{audio}/upload-srt', [AudioCategoryController::class, 'uploadSrtFile'])->name('audio.subtitle.upload-srt');
     Route::get('audio/subtitle/{audio}/export-srt', [AudioCategoryController::class, 'exportSrtFile'])->name('audio.subtitle.export-srt');
     Route::put('audio/subtitle/item/{subtitle}', [AudioCategoryController::class, 'updateSubtitle'])->name('audio.subtitle.update');
     Route::delete('audio/subtitle/item/{subtitle}', [AudioCategoryController::class, 'destroySubtitle'])->name('audio.subtitle.destroy');
-    Route::post('audio/subtitle/bulk-delete', [AudioCategoryController::class, 'bulkDeleteSubtitle'])->name('audio.subtitle.bulk-delete');
     Route::delete('audio/subtitle/{audio}/all', [AudioCategoryController::class, 'destroyAllSubtitles'])->name('audio.subtitle.destroy-all');
 
     // Topic Routes (without lang parameter)

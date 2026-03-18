@@ -97,7 +97,7 @@ const handleBulkDelete = () => {
         return;
     }
     if (confirm(`Apakah Anda yakin ingin menghapus ${selectedSubtitleIds.value.length} subtitle?`)) {
-        router.post(`/audio/subtitle/bulk-delete`, {
+        router.post('/audio/subtitle/bulk-delete', {
             subtitle_ids: selectedSubtitleIds.value,
         }, {
             onSuccess: () => {
@@ -286,14 +286,6 @@ const exportSrt = () => {
                         >
                             <Icon icon="mdi:delete" class="h-4 w-4 lg:mr-1" />
                             <span class="hidden lg:inline">Hapus ({{ selectedSubtitleIds.length }})</span>
-                        </Button>
-                        <Button 
-                            @click="openModal('deleteAll')"
-                            class="bg-[#d9534f] hover:bg-[#d43f3a]"
-                            size="sm"
-                        >
-                            <Icon icon="mdi:delete" class="h-4 w-4 lg:mr-1" />
-                            <span class="hidden lg:inline">Hapus Semua Data</span>
                         </Button>
                         <Button 
                             @click="exportSrt"

@@ -31,6 +31,8 @@ interface TopicContentItem {
     type: 'audio' | 'video';
     title: string;
     waktu: string;
+    description: string;
+    timestamp: string;
     seq: number;
     content: any;
 }
@@ -314,7 +316,8 @@ const handleDelete = () => {
                                 </th>
                                 <th class="w-20 px-4 py-2 text-left text-sm font-medium text-gray-600"></th>
                                 <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Title</th>
-                                <th class="w-24 px-4 py-2 text-left text-sm font-medium text-gray-600">Waktu</th>
+                                <th class="w-32 px-4 py-2 text-left text-sm font-medium text-gray-600">Timestamp</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Description</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -349,10 +352,13 @@ const handleDelete = () => {
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-sm text-gray-600">{{ item.title }}</td>
-                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.waktu }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.timestamp }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">
+                                    <div class="prose prose-sm max-w-none" v-html="item.description"></div>
+                                </td>
                             </tr>
                             <tr v-if="filteredItems.length === 0">
-                                <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">
+                                <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">
                                     Tidak ada data
                                 </td>
                             </tr>

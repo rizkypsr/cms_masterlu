@@ -530,6 +530,8 @@ class TopicController extends Controller
                     'type' => 'audio',
                     'title' => $displayTitle,
                     'waktu' => $formattedTime,
+                    'description' => $subtitle->description ?? '',
+                    'timestamp' => $formattedTime,
                     'seq' => $content->seq,
                     'content' => $subtitle,
                 ];
