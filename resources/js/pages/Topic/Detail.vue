@@ -261,7 +261,7 @@ const handleDelete = () => {
 </script>
 
 <template>
-    <Head title="Topik 1 - {{ topicCategory.title }}" />
+    <Head :title="`Topik 1 - ${topicCategory.title}`" />
 
     <DashboardLayout :user="user">
         <div class="h-[calc(100vh-48px)] overflow-hidden bg-[#d3dce6] p-6">
