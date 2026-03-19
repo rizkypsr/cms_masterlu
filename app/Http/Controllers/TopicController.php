@@ -530,8 +530,8 @@ class TopicController extends Controller
                     'type' => 'audio',
                     'title' => $displayTitle,
                     'waktu' => $formattedTime,
-                    'description' => $subtitle->description ?? '',
                     'timestamp' => $formattedTime,
+                    'source' => $subtitle->audio ? $subtitle->audio->title : 'Unknown',
                     'seq' => $content->seq,
                     'content' => $subtitle,
                 ];
@@ -554,11 +554,15 @@ class TopicController extends Controller
 
                 // Use subtitle title if available, otherwise use audio title
                 $displayTitle = $subtitle->title ?: ($subtitle->audio ? $subtitle->audio->title : 'Untitled');
+                $sourceTitle = $subtitle->audio ? $subtitle->audio->title : 'Unknown';
 
                 return [
                     'id' => $subtitle->id,
                     'type' => 'audio',
-                    'title' => $displayTitle.' - '.$formattedTime,
+                    'title' => $displayTitle,
+                    'timestamp' => $formattedTime,
+                    'description' => $subtitle->description ?? '',
+                    'source' => $sourceTitle,
                     'audio_id' => $subtitle->audio_id,
                 ];
             });
