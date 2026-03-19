@@ -221,13 +221,50 @@ class AudioCategoryController extends Controller
     public function destroy(Category $category)
     {
         DB::transaction(function () use ($category) {
-            // Preserve children by setting their parent_id to null
-            Category::where('parent_id', $category->id)->update(['parent_id' => null]);
+            // Collect all category IDs that will be deleted (parent + all children)
+            $categoryIdsToDelete = $this->collectCategoryIds($category->id);
+            $categoryIdsToDelete[] = $category->id; // Include the parent itself
+            
+            // Set audio_category_id to null for all sub-groups related to these categories
+            AudioSubGroup::whereIn('audio_category_id', $categoryIdsToDelete)
+                ->update(['audio_category_id' => null]);
+            
+            // Recursively delete all child categories
+            $this->deleteChildCategories($category->id);
 
+            // Delete the category itself
             $category->delete();
         });
 
         return back();
+    }
+
+    private function collectCategoryIds($parentId)
+    {
+        $ids = [];
+        $children = Category::where('parent_id', $parentId)->get();
+
+        foreach ($children as $child) {
+            $ids[] = $child->id;
+            // Recursively collect children's IDs
+            $ids = array_merge($ids, $this->collectCategoryIds($child->id));
+        }
+
+        return $ids;
+    }
+
+    private function deleteChildCategories($parentId)
+    {
+        // Get all direct children
+        $children = Category::where('parent_id', $parentId)->get();
+
+        foreach ($children as $child) {
+            // Recursively delete this child's children first
+            $this->deleteChildCategories($child->id);
+            
+            // Then delete the child
+            $child->delete();
+        }
     }
 
     // Sub-Group CRUD (audio_sub_group and audio items)
