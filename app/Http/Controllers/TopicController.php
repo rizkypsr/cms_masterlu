@@ -514,9 +514,8 @@ class TopicController extends Controller
         foreach ($contents as $content) {
             $subtitle = AudioSubtitle::with('audio')->find($content->id_header);
             if ($subtitle) {
-                // Convert timestamp from milliseconds to HH:MM:SS format
-                $ms = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
-                $totalSeconds = floor($ms / 1000);
+                // Convert timestamp from seconds to HH:MM:SS format
+                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
                 $hours = floor($totalSeconds / 3600);
                 $minutes = floor(($totalSeconds % 3600) / 60);
                 $seconds = $totalSeconds % 60;
@@ -544,9 +543,8 @@ class TopicController extends Controller
             ->orderBy('timestamp')
             ->get()
             ->map(function ($subtitle) {
-                // Convert timestamp from milliseconds to HH:MM:SS format
-                $ms = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
-                $totalSeconds = floor($ms / 1000);
+                // Convert timestamp from seconds to HH:MM:SS format
+                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
                 $hours = floor($totalSeconds / 3600);
                 $minutes = floor(($totalSeconds % 3600) / 60);
                 $seconds = $totalSeconds % 60;
