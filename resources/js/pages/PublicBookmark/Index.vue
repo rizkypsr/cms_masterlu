@@ -46,6 +46,17 @@ const modalType = ref<'add' | 'edit' | 'delete'>('add');
 const modalTitle = ref('');
 const selectedItem = ref<PublicBookmark | null>(null);
 
+// Search for users
+const userSearchQuery = ref('');
+
+const filteredUsers = computed(() => {
+    if (!userSearchQuery.value) return props.users;
+    const query = userSearchQuery.value.toLowerCase();
+    return props.users.filter(u => 
+        u.nama.toLowerCase().includes(query)
+    );
+});
+
 // Form
 const form = useForm({
     title: '',
@@ -91,6 +102,7 @@ const openModal = (type: typeof modalType.value, item?: PublicBookmark) => {
         case 'add':
             modalTitle.value = 'Tambah Bookmark';
             form.reset();
+            userSearchQuery.value = '';
             form.seq = props.publicBookmarks.length + 1;
             break;
         case 'edit':
@@ -293,16 +305,27 @@ const togglePin = (item: PublicBookmark) => {
 
                         <div>
                             <Label>Pilih User</Label>
-                            <select
-                                v-model="form.pengguna_id"
-                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                                required
-                            >
-                                <option :value="null">-- Pilih User --</option>
-                                <option v-for="user in users" :key="user.id" :value="user.id">
-                                    {{ user.nama }}
-                                </option>
-                            </select>
+                            <Input 
+                                v-model="userSearchQuery"
+                                placeholder="Cari user..."
+                                class="mb-2"
+                            />
+                            <div class="max-h-48 overflow-y-auto rounded border border-gray-300">
+                                <div
+                                    v-for="user in filteredUsers"
+                                    :key="user.id"
+                                    @click="form.pengguna_id = user.id"
+                                    :class="[
+                                        'cursor-pointer border-b border-gray-100 px-3 py-2 hover:bg-gray-50',
+                                        form.pengguna_id === user.id ? 'bg-blue-50' : ''
+                                    ]"
+                                >
+                                    <div class="text-sm font-medium text-gray-900">{{ user.nama }}</div>
+                                </div>
+                                <div v-if="filteredUsers.length === 0" class="px-3 py-4 text-center text-sm text-gray-500">
+                                    Tidak ada user ditemukan
+                                </div>
+                            </div>
                         </div>
 
                         <div>
