@@ -216,6 +216,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('keyword/category', [App\Http\Controllers\KeywordController::class, 'storeCategory'])->name('keyword.category.store');
     Route::put('keyword/category/{category}', [App\Http\Controllers\KeywordController::class, 'updateCategory'])->name('keyword.category.update');
     Route::delete('keyword/category/{category}', [App\Http\Controllers\KeywordController::class, 'destroyCategory'])->name('keyword.category.destroy');
+
+    // Public Bookmark Routes
+    Route::get('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'index'])->name('public-bookmark.index');
+    Route::get('public-bookmark/user/{pengguna}/bookmarks', [App\Http\Controllers\PublicBookmarkController::class, 'getUserBookmarks'])->name('public-bookmark.user-bookmarks');
+    Route::post('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'store'])->name('public-bookmark.store');
+    Route::post('public-bookmark/{publicBookmark}/toggle-pin', [App\Http\Controllers\PublicBookmarkController::class, 'togglePin'])->name('public-bookmark.toggle-pin');
+    Route::put('public-bookmark/{publicBookmark}', [App\Http\Controllers\PublicBookmarkController::class, 'updateSeq'])->name('public-bookmark.update');
+    Route::delete('public-bookmark/{publicBookmark}', [App\Http\Controllers\PublicBookmarkController::class, 'destroy'])->name('public-bookmark.destroy');
 });
 
 require __DIR__.'/settings.php';

@@ -47,6 +47,11 @@ class Pengguna extends Model
         return $this->hasMany(CommunityPlaylist::class, 'user_id');
     }
 
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(Bookmark::class, 'pengguna_id');
+    }
+
     /**
      * Get the user's display name (uses 'nama' field)
      */

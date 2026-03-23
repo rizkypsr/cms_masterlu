@@ -8,6 +8,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Toaster } from '@/components/ui/toast';
 import { dashboard, logout } from '@/routes';
 
 defineProps<{
@@ -59,9 +60,7 @@ const navItems = [
             { label: 'Topik 3', href: '/topic3' },
         ],
     },
-    { label: 'Playlist', href: '/community-playlist' },
-    { label: 'Resep', href: '#' },
-    { label: 'Komunitas', href: '#' },
+    { label: 'Bookmark', href: '/public-bookmark' },
     { label: 'Unduh', href: '#' },
     { label: 'Kontak', href: '#' },
     {
@@ -203,5 +202,8 @@ const navItems = [
         <main>
             <slot />
         </main>
+        
+        <!-- Toast Notifications -->
+        <Toaster />
     </div>
 </template>

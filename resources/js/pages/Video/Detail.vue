@@ -4,6 +4,7 @@ import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useToast } from '@/components/ui/toast';
 import {
     Command,
     CommandEmpty,
@@ -70,6 +71,7 @@ const props = defineProps<{
 
 const page = usePage();
 const user = page.props.auth?.user;
+const { toast } = useToast();
 
 // Page title
 const pageTitle = computed(() => {
@@ -282,13 +284,42 @@ const openModal = (type: 'add' | 'edit' | 'delete', item?: SubVideo | VideoChild
 };
 
 const handleVideoSubmit = () => {
+    console.log('Form submitted', videoForm.data());
     if (props.video) {
         videoForm.put(`/video/item/${props.video.id}`, {
             preserveScroll: true,
+            onSuccess: () => {
+                toast({
+                    title: 'Berhasil',
+                    description: 'Video berhasil diupdate',
+                });
+            },
+            onError: (errors) => {
+                console.error('Update errors:', errors);
+                toast({
+                    title: 'Error',
+                    description: 'Gagal mengupdate video',
+                    variant: 'destructive',
+                });
+            },
         });
     } else {
         videoForm.post(`/video/video-category/${props.videoCategory.id}/video`, {
             preserveScroll: true,
+            onSuccess: () => {
+                toast({
+                    title: 'Berhasil',
+                    description: 'Video berhasil ditambahkan',
+                });
+            },
+            onError: (errors) => {
+                console.error('Create errors:', errors);
+                toast({
+                    title: 'Error',
+                    description: 'Gagal menambahkan video',
+                    variant: 'destructive',
+                });
+            },
         });
     }
 };

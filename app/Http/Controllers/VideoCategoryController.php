@@ -464,10 +464,18 @@ class VideoCategoryController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
+            'synopsis' => 'nullable|string',
+            'url' => 'nullable|string',
+            'url_audio' => 'nullable|string',
             'seq' => 'nullable|integer',
         ]);
 
-        $data = ['title' => $request->title];
+        $data = [
+            'title' => $request->title,
+            'synopsis' => $request->synopsis,
+            'url' => $request->url,
+            'url_audio' => $request->url_audio,
+        ];
 
         if ($request->has('seq')) {
             $newPosition = $request->seq;
