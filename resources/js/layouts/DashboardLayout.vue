@@ -79,6 +79,7 @@ const navItems = [
             { label: 'Kata Kunci', href: '/keyword' },
             { label: 'Menu', href: '/menu-mobile' },
             { label: 'Notif Schedule', href: '#' },
+            { label: 'Data Migration', href: '/admin/data-migration' },
         ],
     },
 ];

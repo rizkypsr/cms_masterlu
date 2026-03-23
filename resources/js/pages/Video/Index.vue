@@ -25,6 +25,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useToast } from '@/components/ui/toast/use-toast';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { cn } from '@/lib/utils';
 
@@ -62,6 +63,7 @@ const props = defineProps<{
 
 const page = usePage();
 const user = page.props.auth?.user;
+const { toast } = useToast();
 
 // Page title based on language
 const pageTitle = computed(() => props.lang === 'CH' ? 'Video Mandarin - Daftar Isi' : 'Video Indonesia - Topik');
@@ -195,6 +197,7 @@ const openModal = (type: 'view' | 'add' | 'edit' | 'delete', item?: Category, is
         case 'edit':
             modalTitle.value = 'Edit';
             form.title = item?.title || '';
+            form.parent_id = item?.parent_id || null;
             if (item?.parent_id) {
                 const parent = props.categories.find(c => c.id === item.parent_id);
                 const currentPosition = (parent?.children?.findIndex(c => c.id === item.id) ?? -1) + 1;
@@ -236,6 +239,7 @@ const openVideoCategoryModal = (type: 'view' | 'add' | 'edit' | 'delete', item?:
         case 'edit':
             modalTitle.value = 'Edit';
             form.title = item?.title || '';
+            form.parent_id = (item && 'parent_id' in item) ? item.parent_id : null;
             
             // Check if editing a child (parent is provided) or parent item
             if (parent) {
@@ -276,6 +280,18 @@ const handleSubmit = () => {
                     onSuccess: () => {
                         modalOpen.value = false;
                         form.reset();
+                        toast({
+                            title: 'Berhasil',
+                            description: 'Kategori video berhasil ditambahkan',
+                        });
+                    },
+                    onError: (errors) => {
+                        console.error('Validation errors:', errors);
+                        toast({
+                            title: 'Error',
+                            description: Object.values(errors).flat().join(', '),
+                            variant: 'destructive',
+                        });
                     },
                 });
             } else {
@@ -283,14 +299,44 @@ const handleSubmit = () => {
                     onSuccess: () => {
                         modalOpen.value = false;
                         form.reset();
+                        toast({
+                            title: 'Berhasil',
+                            description: 'Kategori video berhasil ditambahkan',
+                        });
+                    },
+                    onError: (errors) => {
+                        console.error('Validation errors:', errors);
+                        toast({
+                            title: 'Error',
+                            description: Object.values(errors).flat().join(', '),
+                            variant: 'destructive',
+                        });
                     },
                 });
             }
         } else if (modalType.value === 'edit' && selectedVideoCategory.value) {
+            console.log('Submitting video category edit:', {
+                id: selectedVideoCategory.value.id,
+                title: form.title,
+                seq: form.seq,
+            });
+            
             form.put(`/video/video-category/${selectedVideoCategory.value.id}`, {
                 onSuccess: () => {
                     modalOpen.value = false;
                     form.reset();
+                    toast({
+                        title: 'Berhasil',
+                        description: 'Kategori video berhasil diupdate',
+                    });
+                },
+                onError: (errors) => {
+                    console.error('Validation errors:', errors);
+                    toast({
+                        title: 'Error',
+                        description: Object.values(errors).flat().join(', '),
+                        variant: 'destructive',
+                    });
                 },
             });
         }
@@ -301,13 +347,43 @@ const handleSubmit = () => {
                 onSuccess: () => {
                     modalOpen.value = false;
                     form.reset();
+                    toast({
+                        title: 'Berhasil',
+                        description: 'Kategori berhasil ditambahkan',
+                    });
+                },
+                onError: (errors) => {
+                    console.error('Validation errors:', errors);
+                    toast({
+                        title: 'Error',
+                        description: Object.values(errors).flat().join(', '),
+                        variant: 'destructive',
+                    });
                 },
             });
         } else if (modalType.value === 'edit' && selectedItem.value) {
+            console.log('Submitting category edit:', {
+                id: selectedItem.value.id,
+                title: form.title,
+                seq: form.seq,
+            });
+            
             form.put(`/video/category/${selectedItem.value.id}`, {
                 onSuccess: () => {
                     modalOpen.value = false;
                     form.reset();
+                    toast({
+                        title: 'Berhasil',
+                        description: 'Kategori berhasil diupdate',
+                    });
+                },
+                onError: (errors) => {
+                    console.error('Validation errors:', errors);
+                    toast({
+                        title: 'Error',
+                        description: Object.values(errors).flat().join(', '),
+                        variant: 'destructive',
+                    });
                 },
             });
         }
@@ -317,12 +393,38 @@ const handleSubmit = () => {
 const handleDelete = () => {
     if (modalContext.value === 'videoCategory' && selectedVideoCategory.value) {
         router.delete(`/video/video-category/${selectedVideoCategory.value.id}`, {
-            onSuccess: () => modalOpen.value = false,
+            onSuccess: () => {
+                modalOpen.value = false;
+                toast({
+                    title: 'Berhasil',
+                    description: 'Kategori video berhasil dihapus',
+                });
+            },
+            onError: (errors) => {
+                console.error('Delete errors:', errors);
+                toast({
+                    title: 'Error',
+                    description: 'Gagal menghapus kategori video',
+                    variant: 'destructive',
+                });
+            },
         });
     } else if (selectedItem.value) {
         router.delete(`/video/category/${selectedItem.value.id}`, {
             onSuccess: () => {
                 modalOpen.value = false;
+                toast({
+                    title: 'Berhasil',
+                    description: 'Kategori berhasil dihapus',
+                });
+            },
+            onError: (errors) => {
+                console.error('Delete errors:', errors);
+                toast({
+                    title: 'Error',
+                    description: 'Gagal menghapus kategori',
+                    variant: 'destructive',
+                });
             },
         });
     }
@@ -540,7 +642,12 @@ const rightPanelColumns = computed<NestedPanelColumn>(() => ({
                             <label class="mb-1 block text-sm font-medium text-gray-700">
                                 {{ modalContext === 'videoCategory' ? 'Nama' : 'Nama Kategori' }}
                             </label>
-                            <Input v-model="form.title" :placeholder="modalContext === 'videoCategory' ? 'Masukkan nama' : 'Masukkan nama kategori'" />
+                            <Input 
+                                v-model="form.title" 
+                                :placeholder="modalContext === 'videoCategory' ? 'Masukkan nama' : 'Masukkan nama kategori'"
+                                required
+                            />
+                            <p v-if="form.errors.title" class="mt-1 text-sm text-red-600">{{ form.errors.title }}</p>
                         </div>
                         
                         <div>
@@ -552,6 +659,7 @@ const rightPanelColumns = computed<NestedPanelColumn>(() => ({
                                         role="combobox"
                                         :aria-expanded="comboboxOpen"
                                         class="w-full justify-between"
+                                        type="button"
                                     >
                                         {{ selectedUrutanLabel }}
                                         <Icon icon="mdi:unfold-more-horizontal" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -580,6 +688,7 @@ const rightPanelColumns = computed<NestedPanelColumn>(() => ({
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                            <p v-if="form.errors.seq" class="mt-1 text-sm text-red-600">{{ form.errors.seq }}</p>
                         </div>
 
                         <div class="flex justify-end gap-2 pt-2">

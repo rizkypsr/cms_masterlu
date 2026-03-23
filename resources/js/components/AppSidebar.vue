@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-vue-next';
+import { BookOpen, Folder, LayoutGrid, ArrowLeftRight } from 'lucide-vue-next';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -36,6 +36,11 @@ const mainNavItems: NavItem[] = [
                 href: '/topic/ID',
             },
         ],
+    },
+    {
+        title: 'Data Migration',
+        href: '/admin/data-migration',
+        icon: ArrowLeftRight,
     },
 ];
 

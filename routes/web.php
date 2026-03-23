@@ -224,6 +224,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('public-bookmark/{publicBookmark}/toggle-pin', [App\Http\Controllers\PublicBookmarkController::class, 'togglePin'])->name('public-bookmark.toggle-pin');
     Route::put('public-bookmark/{publicBookmark}', [App\Http\Controllers\PublicBookmarkController::class, 'updateSeq'])->name('public-bookmark.update');
     Route::delete('public-bookmark/{publicBookmark}', [App\Http\Controllers\PublicBookmarkController::class, 'destroy'])->name('public-bookmark.destroy');
+
+    // Data Migration Routes
+    Route::get('admin/data-migration', [App\Http\Controllers\Admin\DataMigrationController::class, 'index'])->name('admin.data-migration.index');
+    Route::get('admin/data-migration/parents', [App\Http\Controllers\Admin\DataMigrationController::class, 'getParents'])->name('admin.data-migration.parents');
+    Route::get('admin/data-migration/relation-preview', [App\Http\Controllers\Admin\DataMigrationController::class, 'getRelationPreview'])->name('admin.data-migration.relation-preview');
+    Route::post('admin/data-migration/preview-data', [App\Http\Controllers\Admin\DataMigrationController::class, 'previewData'])->name('admin.data-migration.preview-data');
+    Route::post('admin/data-migration/migrate', [App\Http\Controllers\Admin\DataMigrationController::class, 'migrate'])->name('admin.data-migration.migrate');
 });
 
 require __DIR__.'/settings.php';

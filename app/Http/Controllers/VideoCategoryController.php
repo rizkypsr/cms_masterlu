@@ -199,6 +199,9 @@ class VideoCategoryController extends Controller
         $data = ['title' => $request->title];
         $lang = $category->languange;
 
+        // Always update the title first
+        $category->update(['title' => $request->title]);
+
         if (isset($request->seq)) {
             $targetPosition = $request->seq;
 
@@ -252,8 +255,6 @@ class VideoCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $category->update($data);
         }
 
         return back();
@@ -334,6 +335,9 @@ class VideoCategoryController extends Controller
 
         $data = ['title' => $request->title];
 
+        // Always update the title first
+        $videoCategory->update(['title' => $request->title]);
+
         if (isset($request->seq)) {
             $targetPosition = $request->seq;
             $isChild = $videoCategory->parent_id !== null;
@@ -404,8 +408,6 @@ class VideoCategoryController extends Controller
 
                 $movingItem->save();
             });
-        } else {
-            $videoCategory->update($data);
         }
 
         return back();
@@ -881,9 +883,6 @@ class VideoCategoryController extends Controller
 
             return back()->with('success', "SRT file uploaded successfully! {$count} subtitles added.");
         } catch (\Exception $e) {
-            \Log::error('SRT Upload Error: '.$e->getMessage());
-            \Log::error($e->getTraceAsString());
-
             return back()->withErrors(['error' => 'Failed to parse SRT file: '.$e->getMessage()]);
         }
     }
