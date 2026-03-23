@@ -13,7 +13,7 @@ class PublicBookmarkController extends Controller
 {
     public function index()
     {
-        $publicBookmarks = PublicBookmark::with(['bookmark.pengguna'])
+        $publicBookmarks = PublicBookmark::with(['pengguna'])
             ->where('is_active', true)
             ->orderBy('is_pinned', 'desc')
             ->orderBy('seq')
@@ -21,50 +21,32 @@ class PublicBookmarkController extends Controller
             ->map(function ($pb) {
                 return [
                     'id' => $pb->id,
-                    'bookmark_id' => $pb->bookmark_id,
+                    'title' => $pb->title,
+                    'name' => $pb->name,
                     'seq' => $pb->seq,
                     'is_pinned' => $pb->is_pinned,
-                    'bookmark' => $pb->bookmark ? [
-                        'id' => $pb->bookmark->id,
-                        'title' => $pb->bookmark->title,
-                        'type' => $pb->bookmark->type,
-                        'data' => $pb->bookmark->data,
-                        'pengguna' => $pb->bookmark->pengguna ? [
-                            'id' => $pb->bookmark->pengguna->id,
-                            'name' => $pb->bookmark->pengguna->nama,
-                        ] : null,
+                    'pengguna' => $pb->pengguna ? [
+                        'id' => $pb->pengguna->id,
+                        'name' => $pb->pengguna->nama,
                     ] : null,
                 ];
             });
 
-        // Get all bookmarks with user info for the dropdown
-        // Exclude bookmarks that are already in public_bookmarks
-        $usedBookmarkIds = PublicBookmark::pluck('bookmark_id')->toArray();
-        
-        $allBookmarks = Bookmark::with('pengguna')
-            ->whereNotNull('parent_id')
-            ->whereNotIn('id', $usedBookmarkIds)
-            ->get()
-            ->map(function ($bookmark) {
-                return [
-                    'id' => $bookmark->id,
-                    'title' => $bookmark->title,
-                    'type' => $bookmark->type,
-                    'data' => $bookmark->data,
-                    'user_name' => $bookmark->pengguna ? $bookmark->pengguna->nama : 'Unknown',
-                ];
-            });
+        // Get all users who have bookmarks
+        $users = Pengguna::whereHas('bookmarks', function($query) {
+            $query->whereNotNull('parent_id');
+        })->get(['id', 'nama']);
 
         return Inertia::render('PublicBookmark/Index', [
             'publicBookmarks' => $publicBookmarks,
-            'allBookmarks' => $allBookmarks,
+            'users' => $users,
         ]);
     }
 
     public function getUserBookmarks($penggunaId)
     {
         $bookmarks = Bookmark::where('pengguna_id', $penggunaId)
-            ->whereNull('parent_id')
+            ->whereNotNull('parent_id')
             ->get(['id', 'title']);
 
         return response()->json($bookmarks);
@@ -73,18 +55,28 @@ class PublicBookmarkController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'bookmark_id' => 'required|exists:bookmark,id',
+            'title' => 'required|string|max:255',
+            'name' => 'nullable|string|max:255',
+            'pengguna_id' => 'required|exists:pengguna,id',
+            'seq' => 'nullable|integer|min:1',
         ]);
 
-        // Get the max seq
-        $maxSeq = PublicBookmark::max('seq') ?? 0;
+        $targetSeq = $request->seq ?? (PublicBookmark::max('seq') ?? 0) + 1;
 
-        PublicBookmark::create([
-            'bookmark_id' => $request->bookmark_id,
-            'seq' => $maxSeq + 1,
-            'is_active' => true,
-            'is_pinned' => false,
-        ]);
+        DB::transaction(function () use ($request, $targetSeq) {
+            // Shift existing items if needed
+            PublicBookmark::where('seq', '>=', $targetSeq)
+                ->increment('seq');
+
+            PublicBookmark::create([
+                'title' => $request->title,
+                'name' => $request->name,
+                'pengguna_id' => $request->pengguna_id,
+                'seq' => $targetSeq,
+                'is_active' => true,
+                'is_pinned' => false,
+            ]);
+        });
 
         return back();
     }
@@ -101,12 +93,18 @@ class PublicBookmarkController extends Controller
     public function updateSeq(Request $request, PublicBookmark $publicBookmark)
     {
         $request->validate([
+            'name' => 'nullable|string|max:255',
             'seq' => 'required|integer|min:1',
         ]);
 
         $targetPosition = $request->seq;
 
-        DB::transaction(function () use ($publicBookmark, $targetPosition) {
+        DB::transaction(function () use ($request, $publicBookmark, $targetPosition) {
+            // Update name
+            $publicBookmark->update([
+                'name' => $request->name,
+            ]);
+
             $allItems = PublicBookmark::where('is_active', true)
                 ->orderBy('seq')
                 ->lockForUpdate()

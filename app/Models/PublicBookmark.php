@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class PublicBookmark extends Model
 {
     protected $fillable = [
-        'bookmark_id',
+        'title',
+        'name',
+        'pengguna_id',
         'seq',
         'is_active',
         'is_pinned',
@@ -18,8 +20,8 @@ class PublicBookmark extends Model
         'is_pinned' => 'boolean',
     ];
 
-    public function bookmark()
+    public function pengguna()
     {
-        return $this->belongsTo(Bookmark::class, 'bookmark_id');
+        return $this->belongsTo(Pengguna::class, 'pengguna_id');
     }
 }

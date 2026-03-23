@@ -14,36 +14,26 @@ import { Label } from '@/components/ui/label';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { useToast } from '@/components/ui/toast';
 
-interface Bookmark {
+interface User {
     id: number;
-    title: string;
-    type: number;
-    data: string | null;
-    user_name: string;
+    nama: string;
 }
 
-interface BookmarkWithPengguna {
+interface PublicBookmark {
     id: number;
     title: string;
-    type: number;
-    data: string | null;
+    name: string | null;
+    seq: number;
+    is_pinned: boolean;
     pengguna: {
         id: number;
         name: string;
     } | null;
 }
 
-interface PublicBookmark {
-    id: number;
-    bookmark_id: number;
-    seq: number;
-    is_pinned: boolean;
-    bookmark: BookmarkWithPengguna | null;
-}
-
 const props = defineProps<{
     publicBookmarks: PublicBookmark[];
-    allBookmarks: Bookmark[];
+    users: User[];
 }>();
 
 const page = usePage();
@@ -56,44 +46,11 @@ const modalType = ref<'add' | 'edit' | 'delete'>('add');
 const modalTitle = ref('');
 const selectedItem = ref<PublicBookmark | null>(null);
 
-// Search for bookmarks
-const searchQuery = ref('');
-
-const filteredBookmarks = computed(() => {
-    if (!searchQuery.value) return props.allBookmarks;
-    const query = searchQuery.value.toLowerCase();
-    return props.allBookmarks.filter(b => 
-        b.title.toLowerCase().includes(query) ||
-        b.user_name.toLowerCase().includes(query)
-    );
-});
-
-// Helper function to parse page from bookmark data
-const getPageFromData = (bookmark: Bookmark | BookmarkWithPengguna): number | null => {
-    if (!bookmark.data || (bookmark.type !== 3 && bookmark.type !== 5)) {
-        return null;
-    }
-    try {
-        const data = JSON.parse(bookmark.data);
-        return data.page || null;
-    } catch {
-        return null;
-    }
-};
-
-// Helper function to format title with page
-const formatTitle = (bookmark: BookmarkWithPengguna | null): string => {
-    if (!bookmark) return 'Untitled';
-    const page = getPageFromData(bookmark);
-    if (page) {
-        return `${bookmark.title} - Halaman ${page}`;
-    }
-    return bookmark.title;
-};
-
 // Form
 const form = useForm({
-    bookmark_id: null as number | null,
+    title: '',
+    name: '',
+    pengguna_id: null as number | null,
     seq: null as number | null,
 });
 
@@ -103,10 +60,9 @@ const urutanOptions = computed(() => {
     if (modalType.value === 'add') {
         props.publicBookmarks.forEach((item, index) => {
             const position = index + 1;
-            const title = item.bookmark?.title || 'Untitled';
             options.push({
                 position,
-                label: `${position} - ${title}`,
+                label: `${position} - ${item.title}`,
             });
         });
         const lastPosition = props.publicBookmarks.length + 1;
@@ -117,10 +73,9 @@ const urutanOptions = computed(() => {
     } else if (modalType.value === 'edit') {
         props.publicBookmarks.forEach((item, index) => {
             const position = index + 1;
-            const title = item.bookmark?.title || 'Untitled';
             options.push({
                 position,
-                label: `${position} - ${title}`,
+                label: `${position} - ${item.title}`,
             });
         });
     }
@@ -136,11 +91,11 @@ const openModal = (type: typeof modalType.value, item?: PublicBookmark) => {
         case 'add':
             modalTitle.value = 'Tambah Bookmark';
             form.reset();
-            searchQuery.value = '';
             form.seq = props.publicBookmarks.length + 1;
             break;
         case 'edit':
-            modalTitle.value = 'Edit Urutan';
+            modalTitle.value = 'Edit Bookmark';
+            form.name = item!.name || '';
             form.seq = item!.seq;
             break;
         case 'delete':
@@ -277,8 +232,8 @@ const togglePin = (item: PublicBookmark) => {
                                         </button>
                                     </div>
                                 </td>
-                                <td class="px-4 py-2 text-sm text-gray-600">{{ formatTitle(item.bookmark) }}</td>
-                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.bookmark?.pengguna?.name || '-' }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.title }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.name || item.pengguna?.name || '-' }}</td>
                                 <td class="px-4 py-2 text-center">
                                     <button
                                         @click="togglePin(item)"
@@ -320,38 +275,46 @@ const togglePin = (item: PublicBookmark) => {
                     <!-- Add Form -->
                     <form v-if="modalType === 'add'" @submit.prevent="handleSubmit" class="space-y-4">
                         <div>
-                            <Label>Cari Bookmark</Label>
+                            <Label>Title</Label>
                             <Input 
-                                v-model="searchQuery"
-                                placeholder="Cari berdasarkan title atau user..."
-                                class="mb-2"
+                                v-model="form.title"
+                                placeholder="Masukkan title bookmark..."
+                                required
                             />
                         </div>
 
                         <div>
-                            <Label>Pilih Bookmark</Label>
-                            <div class="max-h-64 overflow-y-auto rounded border border-gray-300">
-                                <div
-                                    v-for="bookmark in filteredBookmarks"
-                                    :key="bookmark.id"
-                                    @click="form.bookmark_id = bookmark.id"
-                                    :class="[
-                                        'cursor-pointer border-b border-gray-100 px-3 py-2 hover:bg-gray-50',
-                                        form.bookmark_id === bookmark.id ? 'bg-blue-50' : ''
-                                    ]"
-                                >
-                                    <div class="text-sm font-medium text-gray-900">
-                                        {{ bookmark.title }}
-                                        <span v-if="getPageFromData(bookmark)">
-                                            - Halaman {{ getPageFromData(bookmark) }}
-                                        </span>
-                                    </div>
-                                    <div class="text-xs text-gray-500">{{ bookmark.user_name }}</div>
-                                </div>
-                                <div v-if="filteredBookmarks.length === 0" class="px-3 py-4 text-center text-sm text-gray-500">
-                                    Tidak ada bookmark ditemukan
-                                </div>
-                            </div>
+                            <Label>Name</Label>
+                            <Input 
+                                v-model="form.name"
+                                placeholder="Masukkan name (opsional)..."
+                            />
+                        </div>
+
+                        <div>
+                            <Label>Pilih User</Label>
+                            <select
+                                v-model="form.pengguna_id"
+                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                                required
+                            >
+                                <option :value="null">-- Pilih User --</option>
+                                <option v-for="user in users" :key="user.id" :value="user.id">
+                                    {{ user.nama }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <Label>Urutan</Label>
+                            <select
+                                v-model="form.seq"
+                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                            >
+                                <option v-for="option in urutanOptions" :key="option.position" :value="option.position">
+                                    {{ option.label }}
+                                </option>
+                            </select>
                         </div>
 
                         <div class="flex justify-end gap-2 pt-2">
@@ -359,7 +322,7 @@ const togglePin = (item: PublicBookmark) => {
                             <Button 
                                 type="submit" 
                                 class="bg-[#5cb85c] hover:bg-[#4cae4c]" 
-                                :disabled="form.processing || !form.bookmark_id"
+                                :disabled="form.processing || !form.title || !form.pengguna_id"
                             >
                                 Simpan
                             </Button>
@@ -368,6 +331,14 @@ const togglePin = (item: PublicBookmark) => {
 
                     <!-- Edit Form -->
                     <form v-else-if="modalType === 'edit'" @submit.prevent="handleSubmit" class="space-y-4">
+                        <div>
+                            <Label>Name</Label>
+                            <Input 
+                                v-model="form.name"
+                                placeholder="Masukkan name (opsional)..."
+                            />
+                        </div>
+
                         <div>
                             <Label>Urutan</Label>
                             <select
