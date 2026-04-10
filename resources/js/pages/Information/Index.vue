@@ -2,6 +2,7 @@
 import { Icon } from '@iconify/vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import TiptapEditor from '@/components/TiptapEditor.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -76,14 +77,17 @@ const handleDelete = () => {
 };
 
 const getAvailableTypes = () => {
-    const allTypes = ['Audio', 'Topik 1'];
+    const allTypes = [
+        { label: 'Audio', value: 'audio' },
+        { label: 'Topik 1', value: 'topik1' }
+    ];
     const usedTypes = props.information.map(info => info.type);
     
     if (modalType.value === 'edit' && selectedInformation.value) {
         return allTypes;
     }
     
-    return allTypes.filter(type => !usedTypes.includes(type));
+    return allTypes.filter(type => !usedTypes.includes(type.value));
 };
 </script>
 
@@ -136,7 +140,7 @@ const getAvailableTypes = () => {
                             <div class="mb-3 flex items-start justify-between">
                                 <div>
                                     <span class="inline-block rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                                        {{ info.type }}
+                                        {{ info.type === 'audio' ? 'Audio' : info.type === 'topik1' ? 'Topik 1' : info.type }}
                                     </span>
                                 </div>
                                 <div class="flex gap-1">
@@ -154,7 +158,7 @@ const getAvailableTypes = () => {
                                     </button>
                                 </div>
                             </div>
-                            <p class="whitespace-pre-wrap text-sm text-gray-700">{{ info.description }}</p>
+                            <p class="whitespace-pre-wrap text-sm text-gray-700" v-html="info.description"></p>
                         </div>
                     </div>
                 </div>
@@ -183,8 +187,8 @@ const getAvailableTypes = () => {
                             :disabled="modalType === 'edit'"
                         >
                             <option value="">Select type</option>
-                            <option v-for="type in getAvailableTypes()" :key="type" :value="type">
-                                {{ type }}
+                            <option v-for="type in getAvailableTypes()" :key="type.value" :value="type.value">
+                                {{ type.label }}
                             </option>
                         </select>
                         <p v-if="form.errors.type" class="mt-1 text-sm text-red-600">
@@ -196,14 +200,7 @@ const getAvailableTypes = () => {
                         <label for="description" class="mb-1 block text-sm font-medium text-gray-700">
                             Description <span class="text-red-500">*</span>
                         </label>
-                        <textarea
-                            id="description"
-                            v-model="form.description"
-                            placeholder="Enter description"
-                            rows="10"
-                            required
-                            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        ></textarea>
+                        <TiptapEditor v-model="form.description" height="300px" />
                         <p v-if="form.errors.description" class="mt-1 text-sm text-red-600">
                             {{ form.errors.description }}
                         </p>
@@ -230,7 +227,7 @@ const getAvailableTypes = () => {
 
                 <div v-else>
                     <p class="mb-4 text-sm text-gray-600">
-                        Apakah Anda yakin ingin menghapus information untuk <strong>{{ selectedInformation?.type }}</strong>?
+                        Apakah Anda yakin ingin menghapus information untuk <strong>{{ selectedInformation?.type === 'audio' ? 'Audio' : selectedInformation?.type === 'topik1' ? 'Topik 1' : selectedInformation?.type }}</strong>?
                     </p>
                     <div class="flex justify-end gap-2">
                         <Button 
