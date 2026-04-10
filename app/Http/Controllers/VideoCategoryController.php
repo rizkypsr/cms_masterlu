@@ -279,6 +279,10 @@ class VideoCategoryController extends Controller
         $position = $request->seq;
         $parentId = $request->parent_id;
 
+        // Determine category_id (top-level parent) and sub_category_id (selected category)
+        $categoryId = $category->parent_id ?? $category->id;
+        $subCategoryId = $category->id;
+
         // If parent_id is set, we're adding a child, otherwise a root video category
         if ($parentId) {
             $videoCategories = VideoCategory::where('parent_id', $parentId)
@@ -318,7 +322,8 @@ class VideoCategoryController extends Controller
 
         VideoCategory::create([
             'title' => $request->title,
-            'sub_category_id' => $category->id,
+            'category_id' => $categoryId,
+            'sub_category_id' => $subCategoryId,
             'parent_id' => $parentId,
             'seq' => $newSeq,
         ]);
