@@ -217,6 +217,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('keyword/category/{category}', [App\Http\Controllers\KeywordController::class, 'updateCategory'])->name('keyword.category.update');
     Route::delete('keyword/category/{category}', [App\Http\Controllers\KeywordController::class, 'destroyCategory'])->name('keyword.category.destroy');
 
+    // Information Routes
+    Route::get('information', [App\Http\Controllers\InformationController::class, 'index'])->name('information.index');
+    Route::post('information', [App\Http\Controllers\InformationController::class, 'store'])->name('information.store');
+    Route::put('information/{information}', [App\Http\Controllers\InformationController::class, 'update'])->name('information.update');
+    Route::delete('information/{information}', [App\Http\Controllers\InformationController::class, 'destroy'])->name('information.destroy');
+
     // Public Bookmark Routes
     Route::get('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'index'])->name('public-bookmark.index');
     Route::get('public-bookmark/user/{pengguna}/bookmarks', [App\Http\Controllers\PublicBookmarkController::class, 'getUserBookmarks'])->name('public-bookmark.user-bookmarks');

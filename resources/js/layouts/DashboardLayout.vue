@@ -61,6 +61,7 @@ const navItems = [
         ],
     },
     { label: 'Bookmark', href: '/public-bookmark' },
+    { label: 'Informasi', href: '/information' },
     { label: 'Unduh', href: '#' },
     { label: 'Kontak', href: '#' },
     {
