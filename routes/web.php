@@ -223,6 +223,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('information/{information}', [App\Http\Controllers\InformationController::class, 'update'])->name('information.update');
     Route::delete('information/{information}', [App\Http\Controllers\InformationController::class, 'destroy'])->name('information.destroy');
 
+    // Unduh Routes
+    Route::get('unduh', [App\Http\Controllers\UnduhController::class, 'index'])->name('unduh.index');
+    
+    // Unduh Category Routes (must come before unduh/{unduh} routes)
+    Route::post('unduh/category', [App\Http\Controllers\UnduhController::class, 'storeCategory'])->name('unduh.category.store');
+    Route::put('unduh/category/{category}', [App\Http\Controllers\UnduhController::class, 'updateCategory'])->name('unduh.category.update');
+    Route::delete('unduh/category/{category}', [App\Http\Controllers\UnduhController::class, 'destroyCategory'])->name('unduh.category.destroy');
+    
+    // Unduh Item Routes
+    Route::post('unduh', [App\Http\Controllers\UnduhController::class, 'store'])->name('unduh.store');
+    Route::post('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'update'])->name('unduh.update.post');
+    Route::put('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'update'])->name('unduh.update');
+    Route::delete('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'destroy'])->name('unduh.destroy');
+
     // Public Bookmark Routes
     Route::get('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'index'])->name('public-bookmark.index');
     Route::get('public-bookmark/user/{pengguna}/bookmarks', [App\Http\Controllers\PublicBookmarkController::class, 'getUserBookmarks'])->name('public-bookmark.user-bookmarks');
