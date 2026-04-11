@@ -61,7 +61,7 @@ const unduhForm = useForm({
     unduh_category_id: 0,
     title: '',
     cover: null as File | null,
-    url: '',
+    url: null as File | null,
     link_url: '',
     seq: null as number | null,
 });
@@ -268,7 +268,7 @@ const openUnduhModal = (type: 'add' | 'edit' | 'delete', categoryId?: number, un
         unduhForm.unduh_category_id = unduh.unduh_category_id;
         unduhForm.title = unduh.title;
         unduhForm.cover = null;
-        unduhForm.url = unduh.url || '';
+        unduhForm.url = null;
         unduhForm.link_url = unduh.link_url || '';
         
         // Find category (could be parent or child)
@@ -638,15 +638,22 @@ const handleUnduhDelete = () => {
 
                     <div>
                         <label for="unduh-url" class="mb-1 block text-sm font-medium text-gray-700">
-                            URL
+                            URL (Upload PDF)
                         </label>
-                        <Input
+                        <input
                             id="unduh-url"
-                            v-model="unduhForm.url"
-                            type="text"
-                            placeholder="Masukkan URL (e.g., file.pdf)"
+                            type="file"
+                            accept="application/pdf"
+                            @change="(e) => unduhForm.url = (e.target as HTMLInputElement).files?.[0] || null"
+                            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                         />
-                        <p class="mt-1 text-xs text-gray-500">PDF akan terdeteksi otomatis jika URL berakhiran .pdf</p>
+                        <p class="mt-1 text-xs text-gray-500">Upload file PDF (maksimal 50MB)</p>
+                        <p v-if="unduhModalType === 'edit' && selectedUnduh?.url" class="mt-1 text-xs text-gray-500">
+                            Current: {{ selectedUnduh.url.split('/').pop() }}
+                        </p>
+                        <p v-if="unduhForm.errors.url" class="mt-1 text-sm text-red-600">
+                            {{ unduhForm.errors.url }}
+                        </p>
                     </div>
 
                     <div>
@@ -657,9 +664,12 @@ const handleUnduhDelete = () => {
                             id="unduh-link-url"
                             v-model="unduhForm.link_url"
                             type="text"
-                            placeholder="Masukkan link URL (e.g., file.pdf)"
+                            placeholder="Masukkan link URL"
                         />
-                        <p class="mt-1 text-xs text-gray-500">PDF akan terdeteksi otomatis jika Link URL berakhiran .pdf</p>
+                        <p class="mt-1 text-xs text-gray-500">Jika file PDF lebih dari 50MB, masukkan URL link di sini</p>
+                        <p v-if="unduhForm.errors.link_url" class="mt-1 text-sm text-red-600">
+                            {{ unduhForm.errors.link_url }}
+                        </p>
                     </div>
 
                     <div>

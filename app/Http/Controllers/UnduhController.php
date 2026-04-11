@@ -113,7 +113,7 @@ class UnduhController extends Controller
             $targetPosition = $validated['seq'];
 
             DB::transaction(function () use ($targetPosition, $category) {
-                // Load all categories in the same level ordered by seq
+                // Load all categories in the same level ordered by seq, id
                 $query = Category::where('type', 'unduh');
                 
                 if ($category->parent_id) {
@@ -122,7 +122,7 @@ class UnduhController extends Controller
                     $query->whereNull('parent_id');
                 }
                 
-                $allItems = $query->orderBy('seq')->lockForUpdate()->get();
+                $allItems = $query->orderBy('seq')->orderBy('id')->lockForUpdate()->get();
 
                 // Find current position
                 $currentIndex = $allItems->search(fn ($item) => $item->id == $category->id);
@@ -144,35 +144,50 @@ class UnduhController extends Controller
                 }
 
                 $movingItem = $allItems[$currentIndex];
+                $targetItem = $allItems[$targetPosition - 1];
 
                 if ($targetPosition > $currentPosition) {
                     // Moving DOWN
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+                    $targetSeq = $targetItem->seq;
 
-                    // Shift items up (decrement seq)
-                    $query = Category::where('type', 'unduh');
-                    if ($category->parent_id) {
-                        $query->where('parent_id', $category->parent_id);
+                    // Check if we need to handle duplicate seq values
+                    if ($movingItem->seq == $targetSeq) {
+                        // Items have same seq, just swap their seq values
+                        $movingItem->seq = $targetSeq + 1;
                     } else {
-                        $query->whereNull('parent_id');
+                        // Normal case: shift items up (decrement seq)
+                        if ($movingItem->seq + 1 <= $targetSeq) {
+                            $query = Category::where('type', 'unduh');
+                            if ($category->parent_id) {
+                                $query->where('parent_id', $category->parent_id);
+                            } else {
+                                $query->whereNull('parent_id');
+                            }
+                            $query->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])->decrement('seq');
+                        }
+                        $movingItem->seq = $targetSeq;
                     }
-                    $query->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])->decrement('seq');
-
-                    $movingItem->seq = $targetSeq;
                 } else {
                     // Moving UP
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+                    $targetSeq = $targetItem->seq;
 
-                    // Shift items down (increment seq)
-                    $query = Category::where('type', 'unduh');
-                    if ($category->parent_id) {
-                        $query->where('parent_id', $category->parent_id);
+                    // Check if we need to handle duplicate seq values
+                    if ($movingItem->seq == $targetSeq) {
+                        // Items have same seq, decrement moving item's seq
+                        $movingItem->seq = $targetSeq - 1;
                     } else {
-                        $query->whereNull('parent_id');
+                        // Normal case: shift items down (increment seq)
+                        if ($targetSeq <= $movingItem->seq - 1) {
+                            $query = Category::where('type', 'unduh');
+                            if ($category->parent_id) {
+                                $query->where('parent_id', $category->parent_id);
+                            } else {
+                                $query->whereNull('parent_id');
+                            }
+                            $query->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])->increment('seq');
+                        }
+                        $movingItem->seq = $targetSeq;
                     }
-                    $query->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])->increment('seq');
-
-                    $movingItem->seq = $targetSeq;
                 }
 
                 $movingItem->save();
@@ -202,7 +217,7 @@ class UnduhController extends Controller
             'unduh_category_id' => 'required|exists:category,id',
             'title' => 'required|string',
             'cover' => 'nullable|file|image|max:10240',
-            'url' => 'nullable|string',
+            'url' => 'nullable|file|mimes:pdf|max:51200',
             'link_url' => 'nullable|string',
             'seq' => 'required|integer|min:1',
         ]);
@@ -217,9 +232,19 @@ class UnduhController extends Controller
             $coverPath = url('assets/upload/unduh/' . $filename);
         }
 
+        // Handle URL (PDF) upload
+        $urlPath = null;
+        if ($request->hasFile('url')) {
+            $file = $request->file('url');
+            $filename = md5(uniqid() . time()) . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('assets/upload/unduh'), $filename);
+            // Save full URL instead of just filename
+            $urlPath = url('assets/upload/unduh/' . $filename);
+        }
+
         // Auto-detect if it's a PDF based on URL or link_url
         $isPdf = false;
-        if ($validated['url'] && str_ends_with(strtolower($validated['url']), '.pdf')) {
+        if ($urlPath && str_ends_with(strtolower($urlPath), '.pdf')) {
             $isPdf = true;
         } elseif ($validated['link_url'] && str_ends_with(strtolower($validated['link_url']), '.pdf')) {
             $isPdf = true;
@@ -228,7 +253,7 @@ class UnduhController extends Controller
         $targetPosition = $validated['seq'];
         $categoryId = $validated['unduh_category_id'];
 
-        DB::transaction(function () use ($validated, $targetPosition, $categoryId, $coverPath, $isPdf) {
+        DB::transaction(function () use ($validated, $targetPosition, $categoryId, $coverPath, $urlPath, $isPdf) {
             // Load all items in the same category ordered by seq
             $allItems = Unduh::where('unduh_category_id', $categoryId)
                 ->orderBy('seq')
@@ -257,7 +282,7 @@ class UnduhController extends Controller
                 'title' => $validated['title'],
                 'is_pdf' => $isPdf,
                 'cover' => $coverPath,
-                'url' => $validated['url'] ?? null,
+                'url' => $urlPath,
                 'link_url' => $validated['link_url'] ?? null,
                 'seq' => $newSeq,
             ]);
@@ -272,7 +297,7 @@ class UnduhController extends Controller
             'unduh_category_id' => 'required|exists:category,id',
             'title' => 'required|string',
             'cover' => 'nullable|file|image|max:10240',
-            'url' => 'nullable|string',
+            'url' => 'nullable|file|mimes:pdf|max:51200',
             'link_url' => 'nullable|string',
             'seq' => 'required|integer|min:1',
         ]);
@@ -297,12 +322,31 @@ class UnduhController extends Controller
             $coverPath = url('assets/upload/unduh/' . $filename);
         }
 
+        // Handle URL (PDF) upload
+        $urlPath = $unduh->url;
+        if ($request->hasFile('url')) {
+            // Delete old URL file if exists
+            if ($unduh->url) {
+                // Extract filename from URL
+                $oldFilename = basename(parse_url($unduh->url, PHP_URL_PATH));
+                $oldPath = public_path('assets/upload/unduh/' . $oldFilename);
+                if (file_exists($oldPath)) {
+                    unlink($oldPath);
+                }
+            }
+
+            $file = $request->file('url');
+            $filename = md5(uniqid() . time()) . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('assets/upload/unduh'), $filename);
+            // Save full URL instead of just filename
+            $urlPath = url('assets/upload/unduh/' . $filename);
+        }
+
         // Auto-detect if it's a PDF based on URL or link_url
         $isPdf = false;
-        $url = $validated['url'] ?? $unduh->url;
         $linkUrl = $validated['link_url'] ?? $unduh->link_url;
         
-        if ($url && str_ends_with(strtolower($url), '.pdf')) {
+        if ($urlPath && str_ends_with(strtolower($urlPath), '.pdf')) {
             $isPdf = true;
         } elseif ($linkUrl && str_ends_with(strtolower($linkUrl), '.pdf')) {
             $isPdf = true;
@@ -313,9 +357,10 @@ class UnduhController extends Controller
             $targetPosition = $validated['seq']; // Visual position from frontend
 
             DB::transaction(function () use ($targetPosition, $unduh) {
-                // Step 1: Load all items in the same category ordered by seq
+                // Step 1: Load all items in the same category ordered by seq, id
                 $allItems = Unduh::where('unduh_category_id', $unduh->unduh_category_id)
                     ->orderBy('seq')
+                    ->orderBy('id')
                     ->lockForUpdate()
                     ->get();
 
@@ -339,27 +384,42 @@ class UnduhController extends Controller
                 }
 
                 $movingItem = $allItems[$currentIndex];
+                $targetItem = $allItems[$targetPosition - 1];
 
                 if ($targetPosition > $currentPosition) {
                     // Moving DOWN
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+                    $targetSeq = $targetItem->seq;
 
-                    // Shift items up (decrement seq)
-                    Unduh::where('unduh_category_id', $unduh->unduh_category_id)
-                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
-                        ->decrement('seq');
-
-                    $movingItem->seq = $targetSeq;
+                    // Check if we need to handle duplicate seq values
+                    if ($movingItem->seq == $targetSeq) {
+                        // Items have same seq, just swap their seq values
+                        $movingItem->seq = $targetSeq + 1;
+                    } else {
+                        // Normal case: shift items up (decrement seq)
+                        if ($movingItem->seq + 1 <= $targetSeq) {
+                            Unduh::where('unduh_category_id', $unduh->unduh_category_id)
+                                ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                                ->decrement('seq');
+                        }
+                        $movingItem->seq = $targetSeq;
+                    }
                 } else {
                     // Moving UP
-                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+                    $targetSeq = $targetItem->seq;
 
-                    // Shift items down (increment seq)
-                    Unduh::where('unduh_category_id', $unduh->unduh_category_id)
-                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
-                        ->increment('seq');
-
-                    $movingItem->seq = $targetSeq;
+                    // Check if we need to handle duplicate seq values
+                    if ($movingItem->seq == $targetSeq) {
+                        // Items have same seq, decrement moving item's seq
+                        $movingItem->seq = $targetSeq - 1;
+                    } else {
+                        // Normal case: shift items down (increment seq)
+                        if ($targetSeq <= $movingItem->seq - 1) {
+                            Unduh::where('unduh_category_id', $unduh->unduh_category_id)
+                                ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                                ->increment('seq');
+                        }
+                        $movingItem->seq = $targetSeq;
+                    }
                 }
 
                 $movingItem->save();
@@ -373,7 +433,7 @@ class UnduhController extends Controller
             'title' => $validated['title'],
             'is_pdf' => $isPdf,
             'cover' => $coverPath,
-            'url' => $validated['url'] ?? null,
+            'url' => $urlPath,
             'link_url' => $validated['link_url'] ?? null,
         ]);
 
@@ -386,6 +446,16 @@ class UnduhController extends Controller
         if ($unduh->cover) {
             // Extract filename from URL
             $filename = basename(parse_url($unduh->cover, PHP_URL_PATH));
+            $filePath = public_path('assets/upload/unduh/' . $filename);
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+        }
+
+        // Delete URL file if exists
+        if ($unduh->url) {
+            // Extract filename from URL
+            $filename = basename(parse_url($unduh->url, PHP_URL_PATH));
             $filePath = public_path('assets/upload/unduh/' . $filename);
             if (file_exists($filePath)) {
                 unlink($filePath);
