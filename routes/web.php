@@ -237,6 +237,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'update'])->name('unduh.update');
     Route::delete('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'destroy'])->name('unduh.destroy');
 
+    // Pengguna Routes
+    Route::get('pengguna', [App\Http\Controllers\PenggunaController::class, 'index'])->name('pengguna.index');
+    Route::post('pengguna', [App\Http\Controllers\PenggunaController::class, 'store'])->name('pengguna.store');
+    Route::put('pengguna/{pengguna}', [App\Http\Controllers\PenggunaController::class, 'update'])->name('pengguna.update');
+    Route::delete('pengguna/{pengguna}', [App\Http\Controllers\PenggunaController::class, 'destroy'])->name('pengguna.destroy');
+
+    // Contact WA Routes
+    Route::get('contact-wa', [App\Http\Controllers\ContactWaController::class, 'index'])->name('contact-wa.index');
+    Route::post('contact-wa', [App\Http\Controllers\ContactWaController::class, 'store'])->name('contact-wa.store');
+    Route::put('contact-wa/{contactWa}', [App\Http\Controllers\ContactWaController::class, 'update'])->name('contact-wa.update');
+    Route::delete('contact-wa/{contactWa}', [App\Http\Controllers\ContactWaController::class, 'destroy'])->name('contact-wa.destroy');
+
     // Public Bookmark Routes
     Route::get('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'index'])->name('public-bookmark.index');
     Route::get('public-bookmark/user/{pengguna}/bookmarks', [App\Http\Controllers\PublicBookmarkController::class, 'getUserBookmarks'])->name('public-bookmark.user-bookmarks');
