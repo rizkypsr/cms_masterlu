@@ -15,24 +15,28 @@ class UnduhController extends Controller
         $categories = Category::whereNull('parent_id')
             ->where('type', 'unduh')
             ->orderBy('seq')
+            ->orderBy('id')
             ->get();
 
         foreach ($categories as $category) {
             // Get unduh items for this category
             $category->unduh_items = Unduh::where('unduh_category_id', $category->id)
                 ->orderBy('seq')
+                ->orderBy('id')
                 ->get();
             
             // Get child categories
             $category->children = Category::where('parent_id', $category->id)
                 ->where('type', 'unduh')
                 ->orderBy('seq')
+                ->orderBy('id')
                 ->get();
             
             // Get unduh items for each child category
             foreach ($category->children as $child) {
                 $child->unduh_items = Unduh::where('unduh_category_id', $child->id)
                     ->orderBy('seq')
+                    ->orderBy('id')
                     ->get();
             }
         }

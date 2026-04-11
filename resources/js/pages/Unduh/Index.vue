@@ -125,12 +125,8 @@ const unduhUrutanOptions = computed(() => {
             if (child) {
                 const items = child.unduh_items || [];
                 
-                // Filter out the current item being edited
-                const filteredItems = unduhModalType.value === 'edit' && selectedUnduh.value
-                    ? items.filter(item => item.id !== selectedUnduh.value.id)
-                    : items;
-                
-                filteredItems.forEach((item, index) => {
+                // Show ALL items (don't filter out current item)
+                items.forEach((item, index) => {
                     const position = index + 1;
                     options.push({
                         position,
@@ -139,7 +135,7 @@ const unduhUrutanOptions = computed(() => {
                     });
                 });
                 
-                const lastPosition = filteredItems.length + 1;
+                const lastPosition = items.length + 1;
                 options.push({
                     position: lastPosition,
                     seq: lastPosition,
@@ -154,12 +150,8 @@ const unduhUrutanOptions = computed(() => {
     
     const items = category.unduh_items || [];
     
-    // Filter out the current item being edited
-    const filteredItems = unduhModalType.value === 'edit' && selectedUnduh.value
-        ? items.filter(item => item.id !== selectedUnduh.value.id)
-        : items;
-    
-    filteredItems.forEach((item, index) => {
+    // Show ALL items (don't filter out current item)
+    items.forEach((item, index) => {
         const position = index + 1;
         options.push({
             position,
@@ -168,7 +160,7 @@ const unduhUrutanOptions = computed(() => {
         });
     });
     
-    const lastPosition = filteredItems.length + 1;
+    const lastPosition = items.length + 1;
     options.push({
         position: lastPosition,
         seq: lastPosition,
