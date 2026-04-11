@@ -118,9 +118,48 @@ const unduhUrutanOptions = computed(() => {
     if (!selectedCategoryForUnduh.value) return options;
     
     const category = props.categories.find(c => c.id === selectedCategoryForUnduh.value);
-    const items = category?.unduh_items || [];
+    if (!category) {
+        // If not found in parent categories, search in children
+        for (const parent of props.categories) {
+            const child = parent.children?.find(c => c.id === selectedCategoryForUnduh.value);
+            if (child) {
+                const items = child.unduh_items || [];
+                
+                // Filter out the current item being edited
+                const filteredItems = unduhModalType.value === 'edit' && selectedUnduh.value
+                    ? items.filter(item => item.id !== selectedUnduh.value.id)
+                    : items;
+                
+                filteredItems.forEach((item, index) => {
+                    const position = index + 1;
+                    options.push({
+                        position,
+                        seq: item.seq,
+                        label: `${position} - ${item.title}`,
+                    });
+                });
+                
+                const lastPosition = filteredItems.length + 1;
+                options.push({
+                    position: lastPosition,
+                    seq: lastPosition,
+                    label: `${lastPosition} - (Terakhir)`,
+                });
+                
+                return options;
+            }
+        }
+        return options;
+    }
     
-    items.forEach((item, index) => {
+    const items = category.unduh_items || [];
+    
+    // Filter out the current item being edited
+    const filteredItems = unduhModalType.value === 'edit' && selectedUnduh.value
+        ? items.filter(item => item.id !== selectedUnduh.value.id)
+        : items;
+    
+    filteredItems.forEach((item, index) => {
         const position = index + 1;
         options.push({
             position,
@@ -129,7 +168,7 @@ const unduhUrutanOptions = computed(() => {
         });
     });
     
-    const lastPosition = items.length + 1;
+    const lastPosition = filteredItems.length + 1;
     options.push({
         position: lastPosition,
         seq: lastPosition,
@@ -221,7 +260,17 @@ const openUnduhModal = (type: 'add' | 'edit' | 'delete', categoryId?: number, un
     if (type === 'add' && categoryId) {
         unduhForm.reset();
         unduhForm.unduh_category_id = categoryId;
-        const category = props.categories.find(c => c.id === categoryId);
+        
+        // Find category (could be parent or child)
+        let category = props.categories.find(c => c.id === categoryId);
+        if (!category) {
+            // Search in children
+            for (const parent of props.categories) {
+                category = parent.children?.find(c => c.id === categoryId);
+                if (category) break;
+            }
+        }
+        
         unduhForm.seq = (category?.unduh_items?.length || 0) + 1;
     } else if (type === 'edit' && unduh) {
         unduhForm.unduh_category_id = unduh.unduh_category_id;
@@ -230,7 +279,16 @@ const openUnduhModal = (type: 'add' | 'edit' | 'delete', categoryId?: number, un
         unduhForm.url = unduh.url || '';
         unduhForm.link_url = unduh.link_url || '';
         
-        const category = props.categories.find(c => c.id === unduh.unduh_category_id);
+        // Find category (could be parent or child)
+        let category = props.categories.find(c => c.id === unduh.unduh_category_id);
+        if (!category) {
+            // Search in children
+            for (const parent of props.categories) {
+                category = parent.children?.find(c => c.id === unduh.unduh_category_id);
+                if (category) break;
+            }
+        }
+        
         const items = category?.unduh_items || [];
         const unduhIndex = items.findIndex(item => item.id === unduh.id);
         unduhForm.seq = unduhIndex !== -1 ? unduhIndex + 1 : unduh.seq;

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Unduh;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class UnduhController extends Controller
@@ -49,12 +50,48 @@ class UnduhController extends Controller
             'parent_id' => 'nullable|exists:category,id',
         ]);
 
-        Category::create([
-            'title' => $validated['title'],
-            'seq' => $validated['seq'],
-            'parent_id' => $validated['parent_id'] ?? null,
-            'type' => 'unduh',
-        ]);
+        $targetPosition = $validated['seq'];
+        $parentId = $validated['parent_id'] ?? null;
+
+        DB::transaction(function () use ($validated, $targetPosition, $parentId) {
+            // Load all categories in the same level ordered by seq
+            $query = Category::where('type', 'unduh');
+            
+            if ($parentId) {
+                $query->where('parent_id', $parentId);
+            } else {
+                $query->whereNull('parent_id');
+            }
+            
+            $allItems = $query->orderBy('seq')->lockForUpdate()->get();
+            $totalCount = $allItems->count();
+
+            // If inserting at a position other than last, shift items
+            if ($targetPosition <= $totalCount) {
+                $targetSeq = $allItems[$targetPosition - 1]->seq;
+                
+                // Shift items down (increment seq)
+                $query = Category::where('type', 'unduh');
+                if ($parentId) {
+                    $query->where('parent_id', $parentId);
+                } else {
+                    $query->whereNull('parent_id');
+                }
+                $query->where('seq', '>=', $targetSeq)->increment('seq');
+                
+                $newSeq = $targetSeq;
+            } else {
+                // Inserting at last position
+                $newSeq = $totalCount > 0 ? $allItems->last()->seq + 1 : 1;
+            }
+
+            Category::create([
+                'title' => $validated['title'],
+                'seq' => $newSeq,
+                'parent_id' => $parentId,
+                'type' => 'unduh',
+            ]);
+        });
 
         return back()->with('success', 'Kategori berhasil ditambahkan');
     }
@@ -67,9 +104,81 @@ class UnduhController extends Controller
             'parent_id' => 'nullable|exists:category,id',
         ]);
 
+        // Handle reordering with shift-based algorithm
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq'];
+
+            DB::transaction(function () use ($targetPosition, $category) {
+                // Load all categories in the same level ordered by seq
+                $query = Category::where('type', 'unduh');
+                
+                if ($category->parent_id) {
+                    $query->where('parent_id', $category->parent_id);
+                } else {
+                    $query->whereNull('parent_id');
+                }
+                
+                $allItems = $query->orderBy('seq')->lockForUpdate()->get();
+
+                // Find current position
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $category->id);
+                if ($currentIndex === false) {
+                    return;
+                }
+
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                // Validate target position
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                // No-op if position unchanged
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    // Moving DOWN
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items up (decrement seq)
+                    $query = Category::where('type', 'unduh');
+                    if ($category->parent_id) {
+                        $query->where('parent_id', $category->parent_id);
+                    } else {
+                        $query->whereNull('parent_id');
+                    }
+                    $query->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    // Moving UP
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items down (increment seq)
+                    $query = Category::where('type', 'unduh');
+                    if ($category->parent_id) {
+                        $query->where('parent_id', $category->parent_id);
+                    } else {
+                        $query->whereNull('parent_id');
+                    }
+                    $query->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            unset($validated['seq']);
+        }
+
         $category->update([
             'title' => $validated['title'],
-            'seq' => $validated['seq'],
             'parent_id' => $validated['parent_id'] ?? null,
         ]);
 
@@ -112,15 +221,43 @@ class UnduhController extends Controller
             $isPdf = true;
         }
 
-        Unduh::create([
-            'unduh_category_id' => $validated['unduh_category_id'],
-            'title' => $validated['title'],
-            'is_pdf' => $isPdf,
-            'cover' => $coverPath,
-            'url' => $validated['url'] ?? null,
-            'link_url' => $validated['link_url'] ?? null,
-            'seq' => $validated['seq'],
-        ]);
+        $targetPosition = $validated['seq'];
+        $categoryId = $validated['unduh_category_id'];
+
+        DB::transaction(function () use ($validated, $targetPosition, $categoryId, $coverPath, $isPdf) {
+            // Load all items in the same category ordered by seq
+            $allItems = Unduh::where('unduh_category_id', $categoryId)
+                ->orderBy('seq')
+                ->lockForUpdate()
+                ->get();
+            
+            $totalCount = $allItems->count();
+
+            // If inserting at a position other than last, shift items
+            if ($targetPosition <= $totalCount) {
+                $targetSeq = $allItems[$targetPosition - 1]->seq;
+                
+                // Shift items down (increment seq)
+                Unduh::where('unduh_category_id', $categoryId)
+                    ->where('seq', '>=', $targetSeq)
+                    ->increment('seq');
+                
+                $newSeq = $targetSeq;
+            } else {
+                // Inserting at last position
+                $newSeq = $totalCount > 0 ? $allItems->last()->seq + 1 : 1;
+            }
+
+            Unduh::create([
+                'unduh_category_id' => $categoryId,
+                'title' => $validated['title'],
+                'is_pdf' => $isPdf,
+                'cover' => $coverPath,
+                'url' => $validated['url'] ?? null,
+                'link_url' => $validated['link_url'] ?? null,
+                'seq' => $newSeq,
+            ]);
+        });
 
         return back()->with('success', 'Unduh berhasil ditambahkan');
     }
@@ -167,6 +304,66 @@ class UnduhController extends Controller
             $isPdf = true;
         }
 
+        // Handle reordering with shift-based algorithm
+        if (isset($validated['seq'])) {
+            $targetPosition = $validated['seq']; // Visual position from frontend
+
+            DB::transaction(function () use ($targetPosition, $unduh) {
+                // Step 1: Load all items in the same category ordered by seq
+                $allItems = Unduh::where('unduh_category_id', $unduh->unduh_category_id)
+                    ->orderBy('seq')
+                    ->lockForUpdate()
+                    ->get();
+
+                // Step 2: Find current position
+                $currentIndex = $allItems->search(fn ($item) => $item->id == $unduh->id);
+                if ($currentIndex === false) {
+                    return;
+                }
+
+                $currentPosition = $currentIndex + 1;
+                $totalCount = $allItems->count();
+
+                // Step 3: Validate target position
+                if ($targetPosition > $totalCount) {
+                    $targetPosition = $totalCount;
+                }
+
+                // Step 4: No-op if position unchanged
+                if ($targetPosition === $currentPosition) {
+                    return;
+                }
+
+                $movingItem = $allItems[$currentIndex];
+
+                if ($targetPosition > $currentPosition) {
+                    // Moving DOWN
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items up (decrement seq)
+                    Unduh::where('unduh_category_id', $unduh->unduh_category_id)
+                        ->whereBetween('seq', [$movingItem->seq + 1, $targetSeq])
+                        ->decrement('seq');
+
+                    $movingItem->seq = $targetSeq;
+                } else {
+                    // Moving UP
+                    $targetSeq = $allItems[$targetPosition - 1]->seq;
+
+                    // Shift items down (increment seq)
+                    Unduh::where('unduh_category_id', $unduh->unduh_category_id)
+                        ->whereBetween('seq', [$targetSeq, $movingItem->seq - 1])
+                        ->increment('seq');
+
+                    $movingItem->seq = $targetSeq;
+                }
+
+                $movingItem->save();
+            });
+
+            unset($validated['seq']);
+        }
+
         $unduh->update([
             'unduh_category_id' => $validated['unduh_category_id'],
             'title' => $validated['title'],
@@ -174,7 +371,6 @@ class UnduhController extends Controller
             'cover' => $coverPath,
             'url' => $validated['url'] ?? null,
             'link_url' => $validated['link_url'] ?? null,
-            'seq' => $validated['seq'],
         ]);
 
         return back()->with('success', 'Unduh berhasil diupdate');
