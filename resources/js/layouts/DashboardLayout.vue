@@ -70,7 +70,7 @@ const navItems = [
         hasDropdown: true,
         items: [
             { label: 'Pengguna', href: '/pengguna' },
-            { label: 'Slider', href: '#' },
+            { label: 'Slider', href: '/slider' },
             { label: 'Tab Beranda', href: '#' },
             { label: 'Highlight Subtitle', href: '#' },
             { label: 'Breakline Subtitle', href: '#' },

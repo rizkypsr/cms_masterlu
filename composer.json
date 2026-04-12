@@ -12,11 +12,13 @@
         "php": "^8.2",
         "aerni/cloudflared": "^1.1",
         "inertiajs/inertia-laravel": "^2.0",
+        "jcupitt/vips": "^2.6",
         "laravel/fortify": "^1.30",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.9",
-        "mantas-done/subtitles": "*"
+        "mantas-done/subtitles": "*",
+        "spatie/image": "^3.9"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

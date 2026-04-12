@@ -249,6 +249,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('contact-wa/{contactWa}', [App\Http\Controllers\ContactWaController::class, 'update'])->name('contact-wa.update');
     Route::delete('contact-wa/{contactWa}', [App\Http\Controllers\ContactWaController::class, 'destroy'])->name('contact-wa.destroy');
 
+    // Slider Routes
+    Route::get('slider', [App\Http\Controllers\SliderController::class, 'index'])->name('slider.index');
+    Route::post('slider', [App\Http\Controllers\SliderController::class, 'store'])->name('slider.store');
+    Route::post('slider/{slider}', [App\Http\Controllers\SliderController::class, 'update'])->name('slider.update.post');
+    Route::put('slider/{slider}', [App\Http\Controllers\SliderController::class, 'update'])->name('slider.update');
+    Route::delete('slider/{slider}', [App\Http\Controllers\SliderController::class, 'destroy'])->name('slider.destroy');
+
     // Public Bookmark Routes
     Route::get('public-bookmark', [App\Http\Controllers\PublicBookmarkController::class, 'index'])->name('public-bookmark.index');
     Route::get('public-bookmark/user/{pengguna}/bookmarks', [App\Http\Controllers\PublicBookmarkController::class, 'getUserBookmarks'])->name('public-bookmark.user-bookmarks');
