@@ -176,6 +176,17 @@ class TopicController extends Controller
         $topic = Topic::findOrFail($id);
         $category = Category::first();
 
+        // Get all topic categories for this topic
+        $topicCategories = TopicCategory::where('topics_id', $topic->id)->get();
+
+        foreach ($topicCategories as $topicCategory) {
+            // Delete all contents for this topic category
+            TopicContent::where('topics_category_id', $topicCategory->id)->delete();
+        }
+
+        // Delete all topic categories for this topic
+        TopicCategory::where('topics_id', $topic->id)->delete();
+
         Topic::where('category_id', $category->id)
             ->where('seq', '>', $topic->seq)
             ->decrement('seq');
@@ -363,6 +374,9 @@ class TopicController extends Controller
     public function destroyCategory($id)
     {
         $category = TopicCategory::findOrFail($id);
+
+        // Delete all contents for this topic category
+        TopicContent::where('topics_category_id', $category->id)->delete();
 
         // Determine if this is a child or parent category
         $isChild = $category->parent_id !== null;

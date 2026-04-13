@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Book;
+use App\Models\BookAudio;
 use App\Models\BookChapter;
 use App\Models\BookContent;
 use App\Models\Category;
@@ -212,6 +213,54 @@ class BookCategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        // Get all books in this category
+        $books = Book::where('book_category_id', $category->id)->get();
+
+        foreach ($books as $book) {
+            // Get all chapters for this book
+            $chapters = BookChapter::where('book_id', $book->id)->get();
+
+            foreach ($chapters as $chapter) {
+                // Get all contents for this chapter
+                $contents = BookContent::where('book_chapters_id', $chapter->id)->get();
+
+                foreach ($contents as $content) {
+                    // Delete all audio for this content
+                    BookAudio::where('book_content_id', $content->id)->delete();
+                }
+
+                // Delete all contents for this chapter
+                BookContent::where('book_chapters_id', $chapter->id)->delete();
+            }
+
+            // Delete all chapters for this book
+            BookChapter::where('book_id', $book->id)->delete();
+
+            // Delete cover file
+            if ($book->url) {
+                $coverPath = str_starts_with($book->url, 'http')
+                    ? str_replace(config('app.url'), '', $book->url)
+                    : $book->url;
+                if (file_exists(public_path($coverPath))) {
+                    unlink(public_path($coverPath));
+                }
+            }
+
+            // Delete PDF file
+            if ($book->url_pdf) {
+                $pdfPath = str_starts_with($book->url_pdf, 'http')
+                    ? str_replace(config('app.url'), '', $book->url_pdf)
+                    : $book->url_pdf;
+                if (file_exists(public_path($pdfPath))) {
+                    unlink(public_path($pdfPath));
+                }
+            }
+
+            // Delete the book
+            $book->delete();
+        }
+
+        // Delete the category
         $category->delete();
 
         return back();
@@ -406,6 +455,25 @@ class BookCategoryController extends Controller
 
     public function destroyBook(Book $book)
     {
+        // Get all chapters for this book
+        $chapters = BookChapter::where('book_id', $book->id)->get();
+
+        foreach ($chapters as $chapter) {
+            // Get all contents for this chapter
+            $contents = BookContent::where('book_chapters_id', $chapter->id)->get();
+
+            foreach ($contents as $content) {
+                // Delete all audio for this content
+                BookAudio::where('book_content_id', $content->id)->delete();
+            }
+
+            // Delete all contents for this chapter
+            BookContent::where('book_chapters_id', $chapter->id)->delete();
+        }
+
+        // Delete all chapters for this book
+        BookChapter::where('book_id', $book->id)->delete();
+
         // Delete cover file - handle both relative and full URLs
         if ($book->url) {
             $coverPath = str_starts_with($book->url, 'http')

@@ -194,6 +194,26 @@ class Topic2Controller extends Controller
 
     public function destroy(Category $category)
     {
+        // Get all topic2 in this category
+        $topics2 = Topic2::where('book_category_id', $category->id)->get();
+
+        foreach ($topics2 as $topic2) {
+            // Get all chapters for this topic2
+            $chapters = Topic2Chapter::where('topics2_id', $topic2->id)->get();
+
+            foreach ($chapters as $chapter) {
+                // Delete all contents for this chapter
+                Topic2Content::where('topics2_chapters_id', $chapter->id)->delete();
+            }
+
+            // Delete all chapters for this topic2
+            Topic2Chapter::where('topics2_id', $topic2->id)->delete();
+
+            // Delete the topic2
+            $topic2->delete();
+        }
+
+        // Delete the category
         $category->delete();
 
         return back();
@@ -306,6 +326,18 @@ class Topic2Controller extends Controller
 
     public function destroyTopic2(Topic2 $topic2)
     {
+        // Get all chapters for this topic2
+        $chapters = Topic2Chapter::where('topics2_id', $topic2->id)->get();
+
+        foreach ($chapters as $chapter) {
+            // Delete all contents for this chapter
+            Topic2Content::where('topics2_chapters_id', $chapter->id)->delete();
+        }
+
+        // Delete all chapters for this topic2
+        Topic2Chapter::where('topics2_id', $topic2->id)->delete();
+
+        // Delete the topic2
         $topic2->delete();
 
         return back();
@@ -459,6 +491,10 @@ class Topic2Controller extends Controller
 
     public function destroyChapter(Topic2Chapter $chapter)
     {
+        // Delete all contents for this chapter
+        Topic2Content::where('topics2_chapters_id', $chapter->id)->delete();
+
+        // Delete the chapter
         $chapter->delete();
 
         return back();

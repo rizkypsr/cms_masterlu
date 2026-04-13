@@ -224,11 +224,26 @@ class AudioCategoryController extends Controller
             // Collect all category IDs that will be deleted (parent + all children)
             $categoryIdsToDelete = $this->collectCategoryIds($category->id);
             $categoryIdsToDelete[] = $category->id; // Include the parent itself
-            
-            // Set audio_category_id to null for all sub-groups related to these categories
-            AudioSubGroup::whereIn('audio_category_id', $categoryIdsToDelete)
-                ->update(['audio_category_id' => null]);
-            
+
+            // Get all audio sub groups related to these categories
+            $subGroups = AudioSubGroup::whereIn('audio_category_id', $categoryIdsToDelete)->get();
+
+            foreach ($subGroups as $subGroup) {
+                // Get all audios in this sub group
+                $audios = Audio::where('audio_sub_group_id', $subGroup->id)->get();
+
+                foreach ($audios as $audio) {
+                    // Delete all subtitles for this audio
+                    AudioSubtitle::where('audio_id', $audio->id)->delete();
+
+                    // Delete the audio
+                    $audio->delete();
+                }
+
+                // Delete the sub group
+                $subGroup->delete();
+            }
+
             // Recursively delete all child categories
             $this->deleteChildCategories($category->id);
 
@@ -261,7 +276,7 @@ class AudioCategoryController extends Controller
         foreach ($children as $child) {
             // Recursively delete this child's children first
             $this->deleteChildCategories($child->id);
-            
+
             // Then delete the child
             $child->delete();
         }
@@ -426,6 +441,18 @@ class AudioCategoryController extends Controller
 
     public function destroySubGroup(AudioSubGroup $subGroup)
     {
+        // Get all audios in this sub group
+        $audios = Audio::where('audio_sub_group_id', $subGroup->id)->get();
+
+        foreach ($audios as $audio) {
+            // Delete all subtitles for this audio
+            AudioSubtitle::where('audio_id', $audio->id)->delete();
+
+            // Delete the audio
+            $audio->delete();
+        }
+
+        // Delete the sub group
         $subGroup->delete();
 
         return back();
@@ -502,6 +529,10 @@ class AudioCategoryController extends Controller
 
     public function destroyAudioChild(Audio $audio)
     {
+        // Delete all subtitles for this audio
+        AudioSubtitle::where('audio_id', $audio->id)->delete();
+
+        // Delete the audio
         $audio->delete();
 
         return back();

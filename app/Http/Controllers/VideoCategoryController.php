@@ -262,6 +262,40 @@ class VideoCategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        // Get all video categories in this category
+        $videoCategories = VideoCategory::where('category_id', $category->id)->get();
+
+        foreach ($videoCategories as $videoCategory) {
+            // Get all videos in this video category
+            $videos = Video::where('video_category_id', $videoCategory->id)->get();
+
+            foreach ($videos as $video) {
+                // Delete all subtitles for this video
+                VideoSubtitle::where('video_id', $video->id)->delete();
+
+                // Get all sub groups for this video
+                $subGroups = VideoSubGroup::where('video_id', $video->id)->get();
+
+                foreach ($subGroups as $subGroup) {
+                    // Delete all child videos in this sub group
+                    Video::where('video_sub_group_id', $subGroup->id)->delete();
+                }
+
+                // Delete all sub groups for this video
+                VideoSubGroup::where('video_id', $video->id)->delete();
+
+                // Delete child videos (parent_id relationship)
+                Video::where('parent_id', $video->id)->delete();
+
+                // Delete the video
+                $video->delete();
+            }
+
+            // Delete the video category
+            $videoCategory->delete();
+        }
+
+        // Delete the category
         $category->delete();
 
         return back();
@@ -420,6 +454,32 @@ class VideoCategoryController extends Controller
 
     public function destroyVideoCategory(VideoCategory $videoCategory)
     {
+        // Get all videos in this video category
+        $videos = Video::where('video_category_id', $videoCategory->id)->get();
+
+        foreach ($videos as $video) {
+            // Delete all subtitles for this video
+            VideoSubtitle::where('video_id', $video->id)->delete();
+
+            // Get all sub groups for this video
+            $subGroups = VideoSubGroup::where('video_id', $video->id)->get();
+
+            foreach ($subGroups as $subGroup) {
+                // Delete all child videos in this sub group
+                Video::where('video_sub_group_id', $subGroup->id)->delete();
+            }
+
+            // Delete all sub groups for this video
+            VideoSubGroup::where('video_id', $video->id)->delete();
+
+            // Delete child videos (parent_id relationship)
+            Video::where('parent_id', $video->id)->delete();
+
+            // Delete the video
+            $video->delete();
+        }
+
+        // Delete the video category
         $videoCategory->delete();
 
         return back();
@@ -529,6 +589,24 @@ class VideoCategoryController extends Controller
 
     public function destroyVideo(Video $video)
     {
+        // Delete all subtitles for this video
+        VideoSubtitle::where('video_id', $video->id)->delete();
+
+        // Get all sub groups for this video
+        $subGroups = VideoSubGroup::where('video_id', $video->id)->get();
+
+        foreach ($subGroups as $subGroup) {
+            // Delete all child videos in this sub group
+            Video::where('video_sub_group_id', $subGroup->id)->delete();
+        }
+
+        // Delete all sub groups for this video
+        VideoSubGroup::where('video_id', $video->id)->delete();
+
+        // Delete child videos (parent_id relationship)
+        Video::where('parent_id', $video->id)->delete();
+
+        // Delete the video
         $video->delete();
 
         return back();
@@ -709,6 +787,10 @@ class VideoCategoryController extends Controller
 
     public function destroySubVideo(VideoSubGroup $subVideo)
     {
+        // Delete all child videos in this sub group
+        Video::where('video_sub_group_id', $subVideo->id)->delete();
+
+        // Delete the sub video group
         $subVideo->delete();
 
         return back();
