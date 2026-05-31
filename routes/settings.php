@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\DatabaseBackupController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
@@ -23,4 +24,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    Route::get('settings/database-backup', [DatabaseBackupController::class, 'show'])
+        ->name('database-backup.show');
+
+    Route::get('settings/database-backup/download', [DatabaseBackupController::class, 'download'])
+        ->middleware('throttle:6,1')
+        ->name('database-backup.download');
 });
