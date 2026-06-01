@@ -654,33 +654,30 @@ class AudioCategoryController extends Controller
             return back()->withErrors(['error' => 'No subtitles to export']);
         }
 
-        // Create SRT content
+        // Normalize stored timestamps to milliseconds.
+        // Some rows are stored as seconds (manual entry) and others as milliseconds (SRT upload),
+        // so we mirror the heuristic used on the frontend: values under 24h treated as seconds.
+        $startMsList = $subtitles
+            ->map(fn ($subtitle) => $subtitle->timestamp < 86400 ? $subtitle->timestamp * 1000 : $subtitle->timestamp)
+            ->values();
+
+        $fallbackDurationMs = 2000;
         $srtContent = '';
         $index = 1;
 
-        foreach ($subtitles as $subtitle) {
-            // Convert milliseconds to SRT time format (HH:MM:SS,mmm)
-            $milliseconds = $subtitle->timestamp;
-            $seconds = floor($milliseconds / 1000);
-            $ms = $milliseconds % 1000;
-            $hours = floor($seconds / 3600);
-            $minutes = floor(($seconds % 3600) / 60);
-            $secs = $seconds % 60;
+        foreach ($subtitles as $position => $subtitle) {
+            $startMs = $startMsList[$position];
+            $nextStartMs = $startMsList[$position + 1] ?? null;
 
-            $startTime = sprintf('%02d:%02d:%02d,%03d', $hours, $minutes, $secs, $ms);
+            // End time = start of next subtitle (rolling caption style).
+            // For the last subtitle there is no next start, so fall back to a default duration.
+            $endMs = $nextStartMs ?? $startMs + $fallbackDurationMs;
 
-            // For end time, add 2 seconds (or use next subtitle's timestamp if available)
-            $endMilliseconds = $milliseconds + 2000;
-            $endSeconds = floor($endMilliseconds / 1000);
-            $endMs = $endMilliseconds % 1000;
-            $endHours = floor($endSeconds / 3600);
-            $endMinutes = floor(($endSeconds % 3600) / 60);
-            $endSecs = $endSeconds % 60;
-
-            $endTime = sprintf('%02d:%02d:%02d,%03d', $endHours, $endMinutes, $endSecs, $endMs);
+            $startTime = $this->formatSrtTimestamp($startMs);
+            $endTime = $this->formatSrtTimestamp($endMs);
 
             // Use script field for audio, strip HTML tags for SRT export
-            $text = strip_tags($subtitle->script ?: $subtitle->description ?: '');
+            $text = trim(strip_tags($subtitle->script ?: $subtitle->description ?: ''));
 
             $srtContent .= "{$index}\n";
             $srtContent .= "{$startTime} --> {$endTime}\n";
@@ -689,12 +686,27 @@ class AudioCategoryController extends Controller
             $index++;
         }
 
-        // Generate filename
         $filename = 'audio_'.$audio->id.'_subtitles.srt';
 
         return response($srtContent, 200)
             ->header('Content-Type', 'text/plain')
             ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
+    }
+
+    /**
+     * Format a millisecond value into the SRT timestamp format HH:MM:SS,mmm.
+     */
+    private function formatSrtTimestamp(int $milliseconds): string
+    {
+        $milliseconds = max(0, $milliseconds);
+
+        $totalSeconds = intdiv($milliseconds, 1000);
+        $ms = $milliseconds % 1000;
+        $hours = intdiv($totalSeconds, 3600);
+        $minutes = intdiv($totalSeconds % 3600, 60);
+        $secs = $totalSeconds % 60;
+
+        return sprintf('%02d:%02d:%02d,%03d', $hours, $minutes, $secs, $ms);
     }
 
     public function updateSubtitle(Request $request, AudioSubtitle $subtitle)
