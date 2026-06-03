@@ -950,9 +950,8 @@ class VideoCategoryController extends Controller
 
             $count = 0;
             foreach ($internalFormat as $subtitle) {
-                // timestamp is stored as bigint (milliseconds)
-                // Convert start time from seconds to milliseconds
-                $timestamp = (int) ($subtitle['start'] * 1000);
+                // Store timestamp as seconds (consistent with manual entry)
+                $timestamp = (int) $subtitle['start'];
 
                 // Get subtitle text (join lines if multiple)
                 $description = is_array($subtitle['lines'])
@@ -984,11 +983,11 @@ class VideoCategoryController extends Controller
             return back()->withErrors(['error' => 'No subtitles to export']);
         }
 
-        // Normalize stored timestamps to milliseconds.
-        // Some rows are stored as seconds (manual entry) and others as milliseconds (SRT upload),
-        // so we mirror the heuristic used on the frontend: values under 24h treated as seconds.
+        // Normalize to milliseconds for SRT format.
+        // New data is stored as seconds; old SRT uploads stored as milliseconds.
+        // Values >= 86400 are old ms data (no subtitle realistically >= 24h in seconds).
         $startMsList = $subtitles
-            ->map(fn ($subtitle) => $subtitle->timestamp < 86400 ? $subtitle->timestamp * 1000 : $subtitle->timestamp)
+            ->map(fn ($subtitle) => $subtitle->timestamp >= 86400 ? $subtitle->timestamp : $subtitle->timestamp * 1000)
             ->values();
 
         $fallbackDurationMs = 2000;

@@ -43,12 +43,11 @@ const formatTimestamp = (timestamp: string | number): string => {
         return timestamp;
     }
     
-    // Convert to number
     const value = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
     
-    // If value is very small (< 86400 = 24 hours in seconds), treat as seconds
-    // If value is large, treat as milliseconds
-    const totalSeconds = value < 86400 ? value : Math.floor(value / 1000);
+    // Old SRT uploads stored timestamps as milliseconds, new ones store as seconds.
+    // No real subtitle should be >= 86400 seconds (24h), so values that large are old ms data.
+    const totalSeconds = value >= 86400 ? Math.floor(value / 1000) : value;
     
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
