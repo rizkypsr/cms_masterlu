@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\DatabaseBackupController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\SubscriptionController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,4 +32,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/database-backup/download', [DatabaseBackupController::class, 'download'])
         ->middleware('throttle:6,1')
         ->name('database-backup.download');
+
+    // Subscription / Donor Plans
+    Route::get('settings/subscription', [SubscriptionController::class, 'show'])
+        ->name('subscription.show');
+    Route::post('settings/subscription/plan', [SubscriptionController::class, 'storePlan'])
+        ->name('subscription.plan.store');
+    Route::put('settings/subscription/plan/{plan}', [SubscriptionController::class, 'updatePlan'])
+        ->name('subscription.plan.update');
+    Route::post('settings/subscription/plan/{plan}/toggle', [SubscriptionController::class, 'togglePlan'])
+        ->name('subscription.plan.toggle');
+    Route::post('settings/subscription/user/{pengguna}/assign', [SubscriptionController::class, 'assignUser'])
+        ->name('subscription.user.assign');
+    Route::post('settings/subscription/user/{pengguna}/extend', [SubscriptionController::class, 'extendUser'])
+        ->name('subscription.user.extend');
+    Route::delete('settings/subscription/user/{pengguna}', [SubscriptionController::class, 'revokeUser'])
+        ->name('subscription.user.revoke');
 });

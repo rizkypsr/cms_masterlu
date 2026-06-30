@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AudioCategoryController;
 use App\Http\Controllers\BookCategoryController;
+use App\Http\Controllers\ChatCategoryController;
 use App\Http\Controllers\Topic2Controller;
 use App\Http\Controllers\TopicController;
 use App\Http\Controllers\VideoCategoryController;
@@ -105,6 +106,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('topic/content/{content}', [TopicController::class, 'updateContent'])->name('topic.content.update');
     Route::delete('topic/content/{content}', [TopicController::class, 'destroyContent'])->name('topic.content.destroy');
     Route::post('topic/content/bulk-delete', [TopicController::class, 'bulkDeleteContent'])->name('topic.content.bulk-delete');
+
+    // Chatbot - Kategori (chat_category, two-level tree)
+    Route::get('chatbot/kategori', [ChatCategoryController::class, 'index'])->name('chatbot.kategori.index');
+    Route::post('chatbot/kategori', [ChatCategoryController::class, 'store'])->name('chatbot.kategori.store');
+    Route::put('chatbot/kategori/{chatCategory}', [ChatCategoryController::class, 'update'])->name('chatbot.kategori.update');
+    Route::delete('chatbot/kategori/{chatCategory}', [ChatCategoryController::class, 'destroy'])->name('chatbot.kategori.destroy');
 
     // Topic2 Routes (like Book structure)
     Route::get('topic2/{topic2?}', [Topic2Controller::class, 'index'])->name('topic2.index');

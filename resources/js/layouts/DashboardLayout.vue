@@ -60,6 +60,14 @@ const navItems = [
             { label: 'Topik 3', href: '/topic3' },
         ],
     },
+    {
+        label: 'Chatbot',
+        href: '#',
+        hasDropdown: true,
+        items: [
+            { label: 'Kategori', href: '/chatbot/kategori' },
+        ],
+    },
     { label: 'Bookmark', href: '/public-bookmark' },
     { label: 'Informasi', href: '/information' },
     { label: 'Unduh', href: '/unduh' },
@@ -82,6 +90,7 @@ const navItems = [
             { label: 'Notif Schedule', href: '#' },
             { label: 'Data Migration', href: '/admin/data-migration' },
             { label: 'Backup Database', href: '/settings/database-backup' },
+            { label: 'Subscription', href: '/settings/subscription' },
         ],
     },
 ];

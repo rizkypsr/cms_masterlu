@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Pengguna extends Model
@@ -24,6 +25,9 @@ class Pengguna extends Model
         'row_status',
         'created_by',
         'updated_by',
+        'plan_id',
+        'plan_started_at',
+        'plan_expires_at',
     ];
 
     protected $hidden = [
@@ -33,6 +37,8 @@ class Pengguna extends Model
     protected $casts = [
         'social_media' => 'integer',
         'row_status' => 'integer',
+        'plan_started_at' => 'datetime',
+        'plan_expires_at' => 'datetime',
     ];
 
     // Social media constants
@@ -50,6 +56,23 @@ class Pengguna extends Model
     public function bookmarks(): HasMany
     {
         return $this->hasMany(Bookmark::class, 'pengguna_id');
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
+    }
+
+    /**
+     * Whether the assigned plan is currently active (not expired).
+     */
+    public function hasActivePlan(): bool
+    {
+        if ($this->plan_id === null) {
+            return false;
+        }
+
+        return $this->plan_expires_at === null || $this->plan_expires_at->isFuture();
     }
 
     /**
