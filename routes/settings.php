@@ -42,6 +42,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('subscription.plan.update');
     Route::post('settings/subscription/plan/{plan}/toggle', [SubscriptionController::class, 'togglePlan'])
         ->name('subscription.plan.toggle');
+    Route::post('settings/subscription/user/bulk-assign', [SubscriptionController::class, 'bulkAssignUsers'])
+        ->name('subscription.user.bulk-assign');
     Route::post('settings/subscription/user/{pengguna}/assign', [SubscriptionController::class, 'assignUser'])
         ->name('subscription.user.assign');
     Route::post('settings/subscription/user/{pengguna}/extend', [SubscriptionController::class, 'extendUser'])

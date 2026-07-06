@@ -37,29 +37,24 @@ class SubscriptionController extends Controller
                         ->orWhere('username', 'like', "%{$search}%");
                 });
             })
-            ->when($search === '', function ($query): void {
-                $query->whereNotNull('plan_id');
-            })
             ->orderByRaw('plan_expires_at IS NULL, plan_expires_at ASC')
-            ->limit(50)
-            ->get(['id', 'nama', 'email', 'username', 'plan_id', 'plan_started_at', 'plan_expires_at'])
-            ->map(function (Pengguna $user): array {
-                return [
-                    'id' => $user->id,
-                    'nama' => $user->nama,
-                    'email' => $user->email,
-                    'username' => $user->username,
-                    'plan' => $user->plan ? [
-                        'id' => $user->plan->id,
-                        'name' => $user->plan->name,
-                        'label' => $user->plan->label,
-                        'daily_limit' => $user->plan->daily_limit,
-                    ] : null,
-                    'plan_started_at' => $user->plan_started_at?->toIso8601String(),
-                    'plan_expires_at' => $user->plan_expires_at?->toIso8601String(),
-                    'state' => $user->hasActivePlan() ? 'active' : ($user->plan_id ? 'expired' : 'free'),
-                ];
-            });
+            ->paginate(10, ['id', 'nama', 'email', 'username', 'plan_id', 'plan_started_at', 'plan_expires_at'])
+            ->withQueryString()
+            ->through(fn (Pengguna $user): array => [
+                'id' => $user->id,
+                'nama' => $user->nama,
+                'email' => $user->email,
+                'username' => $user->username,
+                'plan' => $user->plan ? [
+                    'id' => $user->plan->id,
+                    'name' => $user->plan->name,
+                    'label' => $user->plan->label,
+                    'daily_limit' => $user->plan->daily_limit,
+                ] : null,
+                'plan_started_at' => $user->plan_started_at?->toIso8601String(),
+                'plan_expires_at' => $user->plan_expires_at?->toIso8601String(),
+                'state' => $user->hasActivePlan() ? 'active' : ($user->plan_id ? 'expired' : 'free'),
+            ]);
 
         return Inertia::render('settings/Subscription', [
             'plans' => $plans,
@@ -124,6 +119,30 @@ class SubscriptionController extends Controller
         ]);
 
         return back()->with('success', 'Plan berhasil diberikan ke pengguna');
+    }
+
+    /**
+     * Assign a plan to many users at once, same started/expires rule as assignUser.
+     */
+    public function bulkAssignUsers(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'user_ids' => 'required|array|min:1',
+            'user_ids.*' => 'integer|exists:pengguna,id',
+            'plan_id' => 'required|integer|exists:subscription_plan,id',
+        ]);
+
+        $plan = SubscriptionPlan::findOrFail($validated['plan_id']);
+
+        Pengguna::whereIn('id', $validated['user_ids'])->update([
+            'plan_id' => $plan->id,
+            'plan_started_at' => now(),
+            'plan_expires_at' => $plan->duration_days ? now()->addDays($plan->duration_days) : null,
+        ]);
+
+        $count = count($validated['user_ids']);
+
+        return back()->with('success', "Plan berhasil diberikan ke {$count} pengguna");
     }
 
     /**

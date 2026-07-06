@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -42,9 +42,23 @@ interface UserRow {
     state: 'active' | 'expired' | 'free';
 }
 
+interface PaginationLink {
+    url: string | null;
+    label: string;
+    active: boolean;
+}
+
+interface Paginated<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    links: PaginationLink[];
+}
+
 const props = defineProps<{
     plans: Plan[];
-    users: UserRow[];
+    users: Paginated<UserRow>;
     filters: { search: string };
 }>();
 
@@ -110,8 +124,42 @@ const togglePlan = (plan: Plan) => {
     );
 };
 
-// ---- User assignment ----
+// ---- Bulk selection (persists across pages/search until cleared) ----
+const selectedUserIds = ref<Set<number>>(new Set());
+
+const isSelected = (id: number) => selectedUserIds.value.has(id);
+
+const toggleUserSelect = (id: number) => {
+    if (selectedUserIds.value.has(id)) {
+        selectedUserIds.value.delete(id);
+    } else {
+        selectedUserIds.value.add(id);
+    }
+    // Force reactivity: Set mutations need a fresh reference for some readers.
+    selectedUserIds.value = new Set(selectedUserIds.value);
+};
+
+const allOnPageSelected = computed(
+    () => props.users.data.length > 0 && props.users.data.every((u) => isSelected(u.id)),
+);
+
+const toggleSelectAllOnPage = () => {
+    const next = new Set(selectedUserIds.value);
+    if (allOnPageSelected.value) {
+        props.users.data.forEach((u) => next.delete(u.id));
+    } else {
+        props.users.data.forEach((u) => next.add(u.id));
+    }
+    selectedUserIds.value = next;
+};
+
+const clearSelection = () => {
+    selectedUserIds.value = new Set();
+};
+
+// ---- User assignment (single or bulk) ----
 const assignModalOpen = ref(false);
+const assignMode = ref<'single' | 'bulk'>('single');
 const selectedUser = ref<UserRow | null>(null);
 
 const assignForm = useForm({
@@ -119,13 +167,36 @@ const assignForm = useForm({
 });
 
 const openAssignModal = (row: UserRow) => {
+    assignMode.value = 'single';
     selectedUser.value = row;
     assignForm.reset();
     assignForm.plan_id = row.plan?.id ?? null;
     assignModalOpen.value = true;
 };
 
+const openBulkAssignModal = () => {
+    assignMode.value = 'bulk';
+    selectedUser.value = null;
+    assignForm.reset();
+    assignModalOpen.value = true;
+};
+
 const submitAssign = () => {
+    if (assignMode.value === 'bulk') {
+        router.post(
+            '/settings/subscription/user/bulk-assign',
+            { plan_id: assignForm.plan_id, user_ids: [...selectedUserIds.value] },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    assignModalOpen.value = false;
+                    clearSelection();
+                },
+            },
+        );
+        return;
+    }
+
     if (!selectedUser.value) return;
     assignForm.post(
         `/settings/subscription/user/${selectedUser.value.id}/assign`,
@@ -136,11 +207,24 @@ const submitAssign = () => {
     );
 };
 
-const extendUser = (row: UserRow) => {
+// ---- Extend (renew) with confirmation ----
+const extendConfirmOpen = ref(false);
+const userToExtend = ref<UserRow | null>(null);
+
+const openExtendConfirm = (row: UserRow) => {
+    userToExtend.value = row;
+    extendConfirmOpen.value = true;
+};
+
+const confirmExtend = () => {
+    if (!userToExtend.value) return;
     router.post(
-        `/settings/subscription/user/${row.id}/extend`,
+        `/settings/subscription/user/${userToExtend.value.id}/extend`,
         {},
-        { preserveScroll: true },
+        {
+            preserveScroll: true,
+            onSuccess: () => (extendConfirmOpen.value = false),
+        },
     );
 };
 
@@ -157,6 +241,11 @@ const doSearch = () => {
         { search: search.value },
         { preserveState: true, preserveScroll: true, replace: true },
     );
+};
+
+const goToPage = (url: string | null) => {
+    if (!url) return;
+    router.get(url, {}, { preserveState: true, preserveScroll: true });
 };
 
 const formatRupiah = (value: number) =>
@@ -278,14 +367,34 @@ const activePlans = props.plans.filter((p) => p.is_active);
                     </form>
                 </div>
 
-                <div class="overflow-x-auto p-4">
-                    <p v-if="!filters.search" class="mb-3 text-xs text-gray-500">
-                        Menampilkan pengguna yang punya plan. Cari untuk menetapkan plan ke pengguna lain.
-                    </p>
+                <!-- Bulk action toolbar -->
+                <div
+                    v-if="selectedUserIds.size > 0"
+                    class="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2"
+                >
+                    <span class="text-sm text-blue-700">{{ selectedUserIds.size }} pengguna dipilih</span>
+                    <div class="flex gap-2">
+                        <Button size="sm" class="bg-[#337ab7] hover:bg-[#286090]" @click="openBulkAssignModal">
+                            <Icon icon="mdi:account-multiple-plus" class="mr-1 h-4 w-4" />
+                            Set Plan Massal
+                        </Button>
+                        <Button size="sm" variant="outline" @click="clearSelection">Batal</Button>
+                    </div>
+                </div>
 
-                    <table v-if="users.length" class="w-full border-collapse">
+                <div class="overflow-x-auto p-4">
+                    <table v-if="users.data.length" class="w-full border-collapse">
                         <thead>
                             <tr class="border-b border-gray-200 bg-gray-50 text-left text-sm text-gray-700">
+                                <th class="w-8 px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-gray-300"
+                                        :checked="allOnPageSelected"
+                                        title="Pilih semua di halaman ini"
+                                        @change="toggleSelectAllOnPage"
+                                    />
+                                </th>
                                 <th class="px-3 py-2 font-medium">Pengguna</th>
                                 <th class="px-3 py-2 font-medium">Plan</th>
                                 <th class="px-3 py-2 font-medium">Mulai</th>
@@ -296,10 +405,19 @@ const activePlans = props.plans.filter((p) => p.is_active);
                         </thead>
                         <tbody>
                             <tr
-                                v-for="row in users"
+                                v-for="row in users.data"
                                 :key="row.id"
                                 class="border-b border-gray-100 text-sm hover:bg-gray-50"
+                                :class="{ 'bg-blue-50/60': isSelected(row.id) }"
                             >
+                                <td class="px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-gray-300"
+                                        :checked="isSelected(row.id)"
+                                        @change="toggleUserSelect(row.id)"
+                                    />
+                                </td>
                                 <td class="px-3 py-2">
                                     <div class="font-medium text-gray-700">{{ row.nama ?? '-' }}</div>
                                     <div class="text-xs text-gray-500">{{ row.email ?? row.username }}</div>
@@ -337,7 +455,7 @@ const activePlans = props.plans.filter((p) => p.is_active);
                                         </button>
                                         <button
                                             v-if="row.plan"
-                                            @click="extendUser(row)"
+                                            @click="openExtendConfirm(row)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
                                             title="Perpanjang"
                                         >
@@ -358,7 +476,32 @@ const activePlans = props.plans.filter((p) => p.is_active);
                     </table>
 
                     <div v-else class="py-8 text-center text-sm text-gray-500">
-                        {{ filters.search ? 'Pengguna tidak ditemukan' : 'Belum ada pengguna dengan plan' }}
+                        {{ filters.search ? 'Pengguna tidak ditemukan' : 'Belum ada pengguna' }}
+                    </div>
+
+                    <!-- Pagination -->
+                    <div
+                        v-if="users.data.length"
+                        class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-sm text-gray-500"
+                    >
+                        <span>{{ users.total }} pengguna total &middot; halaman {{ users.current_page }} / {{ users.last_page }}</span>
+                        <div class="flex flex-wrap gap-1">
+                            <button
+                                v-for="(link, idx) in users.links"
+                                :key="idx"
+                                :disabled="!link.url"
+                                class="rounded px-2 py-1 text-xs"
+                                :class="
+                                    link.active
+                                        ? 'bg-[#337ab7] text-white'
+                                        : link.url
+                                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                          : 'cursor-not-allowed text-gray-300'
+                                "
+                                v-html="link.label"
+                                @click="goToPage(link.url)"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -433,13 +576,18 @@ const activePlans = props.plans.filter((p) => p.is_active);
         <Dialog :open="assignModalOpen" @update:open="assignModalOpen = $event">
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Tetapkan Plan</DialogTitle>
+                    <DialogTitle>
+                        {{ assignMode === 'bulk' ? `Tetapkan Plan (${selectedUserIds.size} pengguna)` : 'Tetapkan Plan' }}
+                    </DialogTitle>
                 </DialogHeader>
 
                 <form @submit.prevent="submitAssign" class="space-y-4">
-                    <div class="rounded bg-gray-50 p-3 text-sm">
+                    <div v-if="assignMode === 'single'" class="rounded bg-gray-50 p-3 text-sm">
                         <div class="font-medium text-gray-700">{{ selectedUser?.nama ?? '-' }}</div>
                         <div class="text-xs text-gray-500">{{ selectedUser?.email ?? selectedUser?.username }}</div>
+                    </div>
+                    <div v-else class="rounded bg-gray-50 p-3 text-sm text-gray-700">
+                        Plan akan diterapkan ke <strong>{{ selectedUserIds.size }}</strong> pengguna terpilih.
                     </div>
 
                     <div>
@@ -470,6 +618,30 @@ const activePlans = props.plans.filter((p) => p.is_active);
                         </Button>
                     </div>
                 </form>
+            </DialogContent>
+        </Dialog>
+
+        <!-- Extend confirmation -->
+        <Dialog :open="extendConfirmOpen" @update:open="extendConfirmOpen = $event">
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Perpanjang Plan</DialogTitle>
+                </DialogHeader>
+
+                <div class="space-y-4">
+                    <p class="text-sm text-gray-600">
+                        Perpanjang plan <strong>{{ userToExtend?.plan?.label }}</strong> untuk
+                        <strong>{{ userToExtend?.nama ?? userToExtend?.email }}</strong>
+                        selama durasi plan, dihitung dari
+                        {{ userToExtend?.plan_expires_at ? 'tanggal kadaluarsa saat ini' : 'sekarang' }}?
+                    </p>
+                    <div class="flex justify-end gap-2">
+                        <Button type="button" variant="outline" @click="extendConfirmOpen = false">Batal</Button>
+                        <Button type="button" class="bg-[#5cb85c] hover:bg-[#4cae4c]" @click="confirmExtend">
+                            Perpanjang
+                        </Button>
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
     </DashboardLayout>
