@@ -30,16 +30,15 @@ import { cn } from '@/lib/utils';
 interface ChatCategory {
     id: number;
     name: string;
-    types: string | null;
     seq: number;
     is_active: boolean;
     parent_id: number | null;
+    items_count?: number;
     children?: ChatCategory[];
 }
 
 const props = defineProps<{
     categories: ChatCategory[];
-    typeOptions: string[];
 }>();
 
 const page = usePage();
@@ -57,7 +56,6 @@ const form = useForm({
     name: '',
     parent_id: null as number | null,
     seq: null as number | null,
-    types: [] as string[],
     is_active: true as boolean,
 });
 
@@ -65,28 +63,8 @@ const form = useForm({
 const isLeaf = (cat: ChatCategory) =>
     !cat.children?.some((c) => c.is_active);
 
-const typeLabel: Record<string, string> = {
-    book: 'Buku',
-    audio: 'Audio',
-    video: 'Video',
-    topics: 'Topik',
-    topics2: 'Topik 2',
-    topics3: 'Topik 3',
-};
-
-const typesList = (cat: ChatCategory) =>
-    (cat.types || '')
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-
-const toggleType = (type: string) => {
-    const idx = form.types.indexOf(type);
-    if (idx === -1) {
-        form.types.push(type);
-    } else {
-        form.types.splice(idx, 1);
-    }
+const openScope = (cat: ChatCategory) => {
+    router.get(`/chatbot/kategori/${cat.id}/scope`);
 };
 
 // Siblings the row is ordered against (within its parent level).
@@ -142,7 +120,6 @@ const openEdit = (item: ChatCategory, parent?: ChatCategory) => {
     form.name = item.name;
     form.parent_id = item.parent_id;
     form.is_active = item.is_active;
-    form.types = typesList(item);
     const list = parent ? parent.children || [] : props.categories;
     form.seq = list.findIndex((c) => c.id === item.id) + 1 || null;
     modalOpen.value = true;
@@ -222,21 +199,34 @@ const handleDelete = () => {
                                             Nonaktif
                                         </span>
                                         <span
-                                            v-for="type in typesList(category)"
-                                            v-show="isLeaf(category)"
-                                            :key="type"
-                                            class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
-                                        >
-                                            {{ typeLabel[type] || type }}
-                                        </span>
-                                        <span
                                             v-if="!isLeaf(category)"
                                             class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
                                         >
                                             Grup
                                         </span>
+                                        <span
+                                            v-else-if="category.items_count"
+                                            class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
+                                        >
+                                            {{ category.items_count }} konten
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500"
+                                        >
+                                            Belum ada konten
+                                        </span>
                                     </div>
                                     <div class="flex items-center gap-1">
+                                        <button
+                                            v-if="isLeaf(category)"
+                                            @click="openScope(category)"
+                                            class="flex h-7 items-center gap-1 rounded bg-[#337ab7] px-2 text-xs text-white hover:bg-[#286090]"
+                                            title="Kelola Konten"
+                                        >
+                                            <Icon icon="mdi:folder-cog" class="h-4 w-4" />
+                                            Kelola Konten
+                                        </button>
                                         <button
                                             @click="openAdd(category)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
@@ -277,14 +267,27 @@ const handleDelete = () => {
                                                 Nonaktif
                                             </span>
                                             <span
-                                                v-for="type in typesList(child)"
-                                                :key="type"
+                                                v-if="child.items_count"
                                                 class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
                                             >
-                                                {{ typeLabel[type] || type }}
+                                                {{ child.items_count }} konten
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500"
+                                            >
+                                                Belum ada konten
                                             </span>
                                         </div>
                                         <div class="flex items-center gap-1">
+                                            <button
+                                                @click="openScope(child)"
+                                                class="flex h-7 items-center gap-1 rounded bg-[#337ab7] px-2 text-xs text-white hover:bg-[#286090]"
+                                                title="Kelola Konten"
+                                            >
+                                                <Icon icon="mdi:folder-cog" class="h-4 w-4" />
+                                                Kelola
+                                            </button>
                                             <button
                                                 @click="openEdit(child, category)"
                                                 class="flex h-7 w-7 items-center justify-center rounded bg-[#f0ad4e] text-white hover:bg-[#eea236]"
@@ -327,28 +330,6 @@ const handleDelete = () => {
                                 Nama <span class="text-red-500">*</span>
                             </label>
                             <Input v-model="form.name" placeholder="Masukkan nama kategori" />
-                        </div>
-
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700">Types</label>
-                            <p class="mb-2 text-xs text-gray-500">
-                                Pilih untuk kategori daun (leaf). Kosongkan untuk grup header.
-                            </p>
-                            <div class="grid grid-cols-2 gap-2">
-                                <label
-                                    v-for="type in typeOptions"
-                                    :key="type"
-                                    class="flex items-center gap-2 text-sm text-gray-600"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        :checked="form.types.includes(type)"
-                                        @change="toggleType(type)"
-                                        class="h-4 w-4 rounded border-gray-300"
-                                    />
-                                    {{ typeLabel[type] || type }}
-                                </label>
-                            </div>
                         </div>
 
                         <div>

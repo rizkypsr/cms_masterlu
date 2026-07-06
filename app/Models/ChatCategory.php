@@ -33,6 +33,19 @@ class ChatCategory extends Model
         return $this->hasMany(ChatCategory::class, 'parent_id')->orderBy('seq')->orderBy('id');
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(ChatCategoryItem::class, 'category_id');
+    }
+
+    /**
+     * A leaf may hold content scope: it has no active child categories.
+     */
+    public function isLeaf(): bool
+    {
+        return ! $this->children()->where('is_active', true)->exists();
+    }
+
     public function scopeRoots($query)
     {
         return $query->whereNull('parent_id');

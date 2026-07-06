@@ -113,6 +113,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('chatbot/kategori/{chatCategory}', [ChatCategoryController::class, 'update'])->name('chatbot.kategori.update');
     Route::delete('chatbot/kategori/{chatCategory}', [ChatCategoryController::class, 'destroy'])->name('chatbot.kategori.destroy');
 
+    // Chatbot - Scope editor (chat_category_item, lazy content tree)
+    Route::get('chatbot/kategori/{chatCategory}/scope', [ChatCategoryController::class, 'scope'])->name('chatbot.kategori.scope');
+    Route::get('chatbot/kategori/{chatCategory}/scope/items', [ChatCategoryController::class, 'scopeItems'])->name('chatbot.kategori.scope.items');
+    Route::post('chatbot/kategori/{chatCategory}/scope/toggle', [ChatCategoryController::class, 'toggleScope'])->name('chatbot.kategori.scope.toggle');
+    Route::get('chatbot/content-tree/{domain}/children', [ChatCategoryController::class, 'treeChildren'])->name('chatbot.content-tree.children');
+
     // Topic2 Routes (like Book structure)
     Route::get('topic2/{topic2?}', [Topic2Controller::class, 'index'])->name('topic2.index');
     Route::post('topic2/category', [Topic2Controller::class, 'store'])->name('topic2.category.store');
