@@ -34,7 +34,14 @@ class ChatContentTree
             'video' => ['video', null, null],
             'subtitle' => ['video_subtitle', null, null],
         ],
+        'audio' => [
+            'category' => ['category', 'type', 'audio'],
+            'sub_group' => ['audio_sub_group', null, null],
+            'audio' => ['audio', null, null],
+            'subtitle' => ['audio_subtitle', null, null],
+        ],
         'topics' => [
+            'topic' => ['topics', null, null],
             'topic_category' => ['topics_category', null, null],
             'subtitle' => ['audio_subtitle', null, null],
         ],
@@ -49,6 +56,20 @@ class ChatContentTree
             'chapter' => ['topics3_chapters', null, null],
             'content' => ['topics3_contents', null, null],
         ],
+    ];
+
+    /**
+     * (domain, level) => searchable label columns, for free-text search.
+     *
+     * @var array<string, array<string, list<string>>>
+     */
+    private const SEARCH_COLUMNS = [
+        'book' => ['category' => ['title'], 'book' => ['title'], 'chapter' => ['title'], 'content' => ['content']],
+        'video' => ['category' => ['title'], 'video' => ['title'], 'subtitle' => ['description']],
+        'audio' => ['category' => ['title'], 'sub_group' => ['name'], 'audio' => ['title'], 'subtitle' => ['title', 'description']],
+        'topics' => ['topic' => ['title'], 'topic_category' => ['title'], 'subtitle' => ['title', 'description']],
+        'topics2' => ['root' => ['title'], 'chapter' => ['title'], 'content' => ['content']],
+        'topics3' => ['root' => ['title'], 'category' => ['name'], 'chapter' => ['title'], 'content' => ['content']],
     ];
 
     /**
@@ -91,6 +112,7 @@ class ChatContentTree
         return match ($domain) {
             'book' => $this->bookRoots(),
             'video' => $this->videoRoots(),
+            'audio' => $this->audioRoots(),
             'topics' => $this->topicsRoots(),
             'topics2' => $this->topics2Roots(),
             'topics3' => $this->topics3Roots(),
@@ -111,6 +133,10 @@ class ChatContentTree
             'book.chapter' => $this->bookChapterChildren($nodeId),
             'video.category' => $this->videoCategoryChildren($nodeId),
             'video.video' => $this->videoChildren($nodeId),
+            'audio.category' => $this->audioCategoryChildren($nodeId),
+            'audio.sub_group' => $this->audioOfSubGroup($nodeId),
+            'audio.audio' => $this->audioSubtitles($nodeId),
+            'topics.topic' => $this->topicChildren($nodeId),
             'topics.topic_category' => $this->topicCategoryChildren($nodeId),
             'topics2.root' => $this->topics2Chapters($nodeId, null),
             'topics2.chapter' => $this->topics2ChapterChildren($nodeId),
@@ -119,6 +145,62 @@ class ChatContentTree
             'topics3.chapter' => $this->topics3ChapterChildren($nodeId),
             default => [],
         };
+    }
+
+    /**
+     * Free-text search across every level of a domain, deepest included.
+     * Each hit carries its full ancestor path so the frontend can jump/expand
+     * straight to it (same shape as saved scope items).
+     *
+     * @return list<array{domain: string, level: string, node_id: int, label: string, path: list<string>, path_nodes: list<array{domain: string, level: string, node_id: int}>}>
+     */
+    public function search(string $domain, string $term, int $perLevel = 10): array
+    {
+        $results = [];
+
+        foreach (self::SEARCH_COLUMNS[$domain] ?? [] as $level => $columns) {
+            [$table, $extraCol, $extraVal] = self::CATALOG[$domain][$level];
+
+            $ids = DB::table($table)
+                ->when($extraCol !== null, fn ($q) => $q->where($extraCol, $extraVal))
+                ->where(function ($q) use ($columns, $term): void {
+                    foreach ($columns as $column) {
+                        $q->orWhere($column, 'like', "%{$term}%");
+                    }
+                })
+                // topics reuses audio_subtitle; only rows actually bridged via
+                // topics_content belong to (and are reachable in) that tree.
+                ->when($domain === 'topics' && $level === 'subtitle', fn ($q) => $q->whereExists(
+                    fn ($sub) => $sub->from('topics_content')
+                        ->whereColumn('topics_content.id_header', 'audio_subtitle.id')
+                        ->where('topics_content.type', 'audio'),
+                ))
+                ->orderBy('id')
+                ->limit($perLevel)
+                ->pluck('id');
+
+            foreach ($ids as $id) {
+                $chain = $this->ancestors($domain, $level, (int) $id);
+                if ($chain === []) {
+                    continue;
+                }
+
+                $results[] = [
+                    'domain' => $domain,
+                    'level' => $level,
+                    'node_id' => (int) $id,
+                    'label' => $chain[count($chain) - 1]['label'],
+                    'path' => array_map(fn (array $r): string => $r['label'], $chain),
+                    'path_nodes' => array_map(fn (array $r): array => [
+                        'domain' => $r['domain'],
+                        'level' => $r['level'],
+                        'node_id' => $r['node_id'],
+                    ], $chain),
+                ];
+            }
+        }
+
+        return $results;
     }
 
     // ---- BOOK ----
@@ -221,11 +303,68 @@ class ChatContentTree
         return $rows->map(fn ($r) => $this->node('video', 'video', $r->id, $r->title, isset($hasChild[$r->id]) || isset($hasSub[$r->id])))->all();
     }
 
+    // ---- AUDIO ----
+
+    private function audioRoots(): array
+    {
+        $rows = DB::table('category')->where('type', 'audio')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+
+        return $this->mapAudioCategories($rows);
+    }
+
+    private function audioCategoryChildren(int $categoryId): array
+    {
+        $subCats = DB::table('category')->where('type', 'audio')->where('parent_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $subGroups = DB::table('audio_sub_group')->where('audio_category_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'name']);
+
+        $hasAudio = $this->hasChildrenSet('audio', 'audio_sub_group_id', $subGroups->pluck('id')->all());
+
+        return array_merge(
+            $this->mapAudioCategories($subCats),
+            $subGroups->map(fn ($r) => $this->node('audio', 'sub_group', $r->id, $r->name, isset($hasAudio[$r->id])))->all(),
+        );
+    }
+
+    private function audioOfSubGroup(int $subGroupId): array
+    {
+        $rows = DB::table('audio')->where('audio_sub_group_id', $subGroupId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $hasSub = $this->hasChildrenSet('audio_subtitle', 'audio_id', $rows->pluck('id')->all());
+
+        return $rows->map(fn ($r) => $this->node('audio', 'audio', $r->id, $r->title, isset($hasSub[$r->id])))->all();
+    }
+
+    private function audioSubtitles(int $audioId): array
+    {
+        $rows = DB::table('audio_subtitle')->where('audio_id', $audioId)->orderBy('timestamp')->orderBy('id')->get(['id', 'title', 'description']);
+
+        return $rows->map(fn ($r) => $this->node('audio', 'subtitle', $r->id, $r->title ?: $this->snippet($r->description), false))->all();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $rows
+     */
+    private function mapAudioCategories($rows): array
+    {
+        $ids = $rows->pluck('id')->all();
+        $hasSub = $this->hasChildrenSet('category', 'parent_id', $ids, 'type', 'audio');
+        $hasGroup = $this->hasChildrenSet('audio_sub_group', 'audio_category_id', $ids);
+
+        return $rows->map(fn ($r) => $this->node('audio', 'category', $r->id, $r->title, isset($hasSub[$r->id]) || isset($hasGroup[$r->id])))->all();
+    }
+
     // ---- TOPICS (topic1) ----
 
     private function topicsRoots(): array
     {
-        $rows = DB::table('topics_category')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $rows = DB::table('topics')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $has = $this->hasChildrenSet('topics_category', 'topics_id', $rows->pluck('id')->all());
+
+        return $rows->map(fn ($r) => $this->node('topics', 'topic', $r->id, $r->title, isset($has[$r->id])))->all();
+    }
+
+    private function topicChildren(int $topicId): array
+    {
+        $rows = DB::table('topics_category')->where('topics_id', $topicId)->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
 
         return $this->mapTopicCategories($rows);
     }
@@ -372,7 +511,12 @@ class ChatContentTree
             'video.category' => $this->refChain('video_category', 'parent_id', $nodeId, 'video', 'category'),
             'video.video' => $this->videoRefs($nodeId),
             'video.subtitle' => $this->videoSubtitleRefs($nodeId),
-            'topics.topic_category' => $this->refChain('topics_category', 'parent_id', $nodeId, 'topics', 'topic_category'),
+            'audio.category' => $this->refChain('category', 'parent_id', $nodeId, 'audio', 'category'),
+            'audio.sub_group' => $this->audioSubGroupRefs($nodeId),
+            'audio.audio' => $this->audioRefs($nodeId),
+            'audio.subtitle' => $this->audioSubtitleRefs($nodeId),
+            'topics.topic' => $this->singleRef('topics', $nodeId, 'topics', 'topic'),
+            'topics.topic_category' => $this->topicCategoryRefs($nodeId),
             'topics.subtitle' => $this->topicSubtitleRefs($nodeId),
             'topics2.root' => $this->singleRef('topics2', $nodeId, 'topics2', 'root'),
             'topics2.chapter' => $this->chapterRefs('topics2', 'topics2_id', $nodeId),
@@ -539,6 +683,72 @@ class ChatContentTree
     /**
      * @return list<array{domain: string, level: string, node_id: int, label: string}>
      */
+    private function audioSubGroupRefs(int $subGroupId): array
+    {
+        $group = DB::table('audio_sub_group')->where('id', $subGroupId)->first(['name', 'audio_category_id']);
+        if ($group === null) {
+            return [];
+        }
+
+        $categoryId = $group->audio_category_id !== null ? (int) $group->audio_category_id : null;
+        $catChain = $this->refChain('category', 'parent_id', $categoryId, 'audio', 'category');
+
+        return array_merge($catChain, [$this->ref('audio', 'sub_group', $subGroupId, $group->name)]);
+    }
+
+    /**
+     * @return list<array{domain: string, level: string, node_id: int, label: string}>
+     */
+    private function audioRefs(int $audioId): array
+    {
+        $audio = DB::table('audio')->where('id', $audioId)->first(['title', 'audio_sub_group_id']);
+        if ($audio === null) {
+            return [];
+        }
+
+        $group = $audio->audio_sub_group_id !== null ? $this->audioSubGroupRefs((int) $audio->audio_sub_group_id) : [];
+
+        return array_merge($group, [$this->ref('audio', 'audio', $audioId, $audio->title)]);
+    }
+
+    /**
+     * @return list<array{domain: string, level: string, node_id: int, label: string}>
+     */
+    private function audioSubtitleRefs(int $subtitleId): array
+    {
+        $sub = DB::table('audio_subtitle')->where('id', $subtitleId)->first(['title', 'description', 'audio_id']);
+        if ($sub === null) {
+            return [];
+        }
+
+        $audio = $sub->audio_id ? $this->audioRefs((int) $sub->audio_id) : [];
+
+        return array_merge($audio, [$this->ref('audio', 'subtitle', $subtitleId, $sub->title ?: $this->snippet($sub->description))]);
+    }
+
+    /**
+     * Category chain up to root, prefixed with the owning topics row.
+     *
+     * @return list<array{domain: string, level: string, node_id: int, label: string}>
+     */
+    private function topicCategoryRefs(int $categoryId): array
+    {
+        $catChain = $this->refChain('topics_category', 'parent_id', $categoryId, 'topics', 'topic_category');
+        if ($catChain === []) {
+            return [];
+        }
+
+        $rootCat = DB::table('topics_category')->where('id', $catChain[0]['node_id'])->first(['topics_id']);
+        $topicRef = $rootCat && $rootCat->topics_id
+            ? $this->singleRef('topics', (int) $rootCat->topics_id, 'topics', 'topic')
+            : [];
+
+        return array_merge($topicRef, $catChain);
+    }
+
+    /**
+     * @return list<array{domain: string, level: string, node_id: int, label: string}>
+     */
     private function topicSubtitleRefs(int $subtitleId): array
     {
         $sub = DB::table('audio_subtitle')->where('id', $subtitleId)->first(['title', 'description']);
@@ -548,12 +758,25 @@ class ChatContentTree
 
         $label = $sub->title ?: $this->snippet($sub->description);
 
-        $bridge = DB::table('topics_content')
+        // The same subtitle can be referenced from several categories; prefer a
+        // bridge whose chain resolves to a still-existing topics row.
+        $bridgeCategoryIds = DB::table('topics_content')
             ->where('id_header', $subtitleId)
             ->where('type', 'audio')
-            ->first(['topics_category_id']);
+            ->orderBy('id')
+            ->pluck('topics_category_id');
 
-        $catChain = $bridge ? $this->refChain('topics_category', 'parent_id', (int) $bridge->topics_category_id, 'topics', 'topic_category') : [];
+        $catChain = [];
+        foreach ($bridgeCategoryIds as $bridgeCategoryId) {
+            $chain = $this->topicCategoryRefs((int) $bridgeCategoryId);
+            if ($chain !== [] && $catChain === []) {
+                $catChain = $chain;
+            }
+            if ($chain !== [] && $chain[0]['level'] === 'topic') {
+                $catChain = $chain;
+                break;
+            }
+        }
 
         return array_merge($catChain, [$this->ref('topics', 'subtitle', $subtitleId, $label)]);
     }

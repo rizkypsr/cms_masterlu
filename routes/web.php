@@ -118,6 +118,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('chatbot/kategori/{chatCategory}/scope/items', [ChatCategoryController::class, 'scopeItems'])->name('chatbot.kategori.scope.items');
     Route::post('chatbot/kategori/{chatCategory}/scope/toggle', [ChatCategoryController::class, 'toggleScope'])->name('chatbot.kategori.scope.toggle');
     Route::get('chatbot/content-tree/{domain}/children', [ChatCategoryController::class, 'treeChildren'])->name('chatbot.content-tree.children');
+    Route::get('chatbot/content-tree/{domain}/search', [ChatCategoryController::class, 'treeSearch'])->name('chatbot.content-tree.search');
 
     // Topic2 Routes (like Book structure)
     Route::get('topic2/{topic2?}', [Topic2Controller::class, 'index'])->name('topic2.index');
@@ -238,12 +239,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Unduh Routes
     Route::get('unduh', [App\Http\Controllers\UnduhController::class, 'index'])->name('unduh.index');
-    
+
     // Unduh Category Routes (must come before unduh/{unduh} routes)
     Route::post('unduh/category', [App\Http\Controllers\UnduhController::class, 'storeCategory'])->name('unduh.category.store');
     Route::put('unduh/category/{category}', [App\Http\Controllers\UnduhController::class, 'updateCategory'])->name('unduh.category.update');
     Route::delete('unduh/category/{category}', [App\Http\Controllers\UnduhController::class, 'destroyCategory'])->name('unduh.category.destroy');
-    
+
     // Unduh Item Routes
     Route::post('unduh', [App\Http\Controllers\UnduhController::class, 'store'])->name('unduh.store');
     Route::post('unduh/{unduh}', [App\Http\Controllers\UnduhController::class, 'update'])->name('unduh.update.post');

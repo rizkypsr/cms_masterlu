@@ -138,6 +138,21 @@ class ChatCategoryController extends Controller
     }
 
     /**
+     * Free-text search across every level of a domain tree (AJAX).
+     */
+    public function treeSearch(Request $request, string $domain): JsonResponse
+    {
+        abort_unless(in_array($domain, ChatContentTree::domains(), true), 404);
+
+        $term = trim($request->string('q')->value());
+        if (mb_strlen($term) < 2) {
+            return response()->json(['items' => []]);
+        }
+
+        return response()->json(['items' => (new ChatContentTree)->search($domain, $term)]);
+    }
+
+    /**
      * Toggle a single scope item on/off (idempotent, honours UNIQUE).
      */
     public function toggleScope(Request $request, ChatCategory $chatCategory): JsonResponse
@@ -223,6 +238,7 @@ class ChatCategoryController extends Controller
         return [
             ['value' => 'book', 'label' => 'Buku'],
             ['value' => 'video', 'label' => 'Video'],
+            ['value' => 'audio', 'label' => 'Audio'],
             ['value' => 'topics', 'label' => 'Topik 1'],
             ['value' => 'topics2', 'label' => 'Topik 2'],
             ['value' => 'topics3', 'label' => 'Topik 3'],

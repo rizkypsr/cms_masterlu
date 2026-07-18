@@ -2,7 +2,7 @@
 import { Icon } from '@iconify/vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
-import { nextTick, onMounted, provide, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, provide, reactive, ref, watch } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import TreeNode, { type ExpandControl, type TreeNodeData } from './TreeNode.vue';
 
@@ -156,6 +156,53 @@ const openItem = async (item: ScopeItem) => {
     await nextTick();
 };
 
+// ---- Search (per tab, hits every level of the domain) ----
+const searchQuery = ref('');
+const searchResults = ref<ScopeItem[]>([]);
+const searchLoading = ref(false);
+const isSearching = computed(() => searchQuery.value.trim().length >= 2);
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchSeq = 0;
+
+const runSearch = async () => {
+    const q = searchQuery.value.trim();
+    if (q.length < 2) {
+        searchResults.value = [];
+        searchLoading.value = false;
+        return;
+    }
+    const seq = ++searchSeq;
+    searchLoading.value = true;
+    try {
+        const { data } = await axios.get(`/chatbot/content-tree/${activeDomain.value}/search`, {
+            params: { q },
+        });
+        if (seq !== searchSeq) return;
+        searchResults.value = (data.items ?? []).map((i: Omit<ScopeItem, 'missing'>) => ({ ...i, missing: false }));
+    } finally {
+        if (seq === searchSeq) searchLoading.value = false;
+    }
+};
+
+watch(searchQuery, () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 300);
+});
+
+// Result click: close search view, then reuse the saved-item jump (auto-expand).
+const openResult = async (item: ScopeItem) => {
+    searchQuery.value = '';
+    searchResults.value = [];
+    await openItem(item);
+};
+
+const toggleResult = (item: ScopeItem, checked: boolean) => {
+    toggle(
+        { domain: item.domain, level: item.level, node_id: item.node_id, label: item.label, has_children: false },
+        checked,
+    );
+};
+
 provide('checkedSet', checkedSet);
 provide('keyOf', keyOf);
 provide('toggle', toggle);
@@ -163,7 +210,10 @@ provide('expandControl', expandControl);
 provide('childrenCache', childrenCache);
 provide('expandedKeys', expandedKeys);
 
-watch(activeDomain, (d) => loadRoots(d));
+watch(activeDomain, (d) => {
+    loadRoots(d);
+    if (isSearching.value) runSearch();
+});
 onMounted(() => loadRoots(activeDomain.value));
 </script>
 
@@ -227,8 +277,69 @@ onMounted(() => loadRoots(activeDomain.value));
                     </button>
                 </div>
 
+                <!-- Search -->
+                <div class="shrink-0 border-b border-gray-100 p-3">
+                    <div class="relative">
+                        <Icon icon="mdi:magnify" class="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            v-model="searchQuery"
+                            type="text"
+                            :placeholder="`Cari di ${domainLabel(activeDomain)} — semua level...`"
+                            class="w-full rounded border border-gray-200 py-1.5 pr-8 pl-8 text-sm focus:border-[#337ab7] focus:outline-none"
+                        />
+                        <button
+                            v-if="searchQuery"
+                            class="absolute top-1/2 right-2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            title="Bersihkan pencarian"
+                            @click="searchQuery = ''"
+                        >
+                            <Icon icon="mdi:close" class="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search results -->
+                <div v-if="isSearching" class="flex-1 overflow-auto p-4">
+                    <div v-if="searchLoading" class="flex items-center gap-2 text-sm text-gray-500">
+                        <Icon icon="mdi:loading" class="h-4 w-4 animate-spin" />
+                        Mencari...
+                    </div>
+
+                    <ul v-else-if="searchResults.length" class="space-y-1">
+                        <li
+                            v-for="result in searchResults"
+                            :key="keyOf(result)"
+                            class="flex cursor-pointer items-start gap-2 rounded border border-transparent px-2 py-1.5 hover:border-[#337ab7] hover:bg-blue-50"
+                            title="Klik untuk buka di pohon"
+                            @click="openResult(result)"
+                        >
+                            <input
+                                type="checkbox"
+                                class="mt-0.5 h-4 w-4 shrink-0 accent-[#337ab7]"
+                                :checked="checkedSet.has(keyOf(result))"
+                                @click.stop
+                                @change="toggleResult(result, ($event.target as HTMLInputElement).checked)"
+                            />
+                            <div class="min-w-0">
+                                <p class="truncate text-sm text-gray-700" :title="result.label">{{ result.label }}</p>
+                                <p
+                                    v-if="result.path.length > 1"
+                                    class="truncate text-[11px] text-gray-400"
+                                    :title="result.path.join(' › ')"
+                                >
+                                    {{ result.path.slice(0, -1).join(' › ') }}
+                                </p>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <p v-else class="py-8 text-center text-sm text-gray-400">
+                        Tidak ada hasil untuk "{{ searchQuery.trim() }}".
+                    </p>
+                </div>
+
                 <!-- Tree -->
-                <div class="flex-1 overflow-auto p-4">
+                <div v-else class="flex-1 overflow-auto p-4">
                     <div v-if="loadingRoots && !rootsCache[activeDomain]" class="flex items-center gap-2 text-sm text-gray-500">
                         <Icon icon="mdi:loading" class="h-4 w-4 animate-spin" />
                         Memuat...
