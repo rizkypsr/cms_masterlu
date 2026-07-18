@@ -63,6 +63,24 @@ class ChatContentTree
      *
      * @var array<string, array<string, list<string>>>
      */
+    /**
+     * (domain) => the level a fully-resolved ancestor chain must start with to
+     * be reachable from that domain's actual tree roots. Rows whose chain
+     * resolves to something else (e.g. a topics_category pointing at a
+     * deleted `topics` row) are orphaned data — excluded from search since
+     * there is no path back to a root to expand.
+     *
+     * @var array<string, list<string>>
+     */
+    private const ROOT_LEVELS = [
+        'book' => ['category'],
+        'video' => ['category'],
+        'audio' => ['category'],
+        'topics' => ['topic'],
+        'topics2' => ['root'],
+        'topics3' => ['root', 'category'],
+    ];
+
     private const SEARCH_COLUMNS = [
         'book' => ['category' => ['title'], 'book' => ['title'], 'chapter' => ['title'], 'content' => ['content']],
         'video' => ['category' => ['title'], 'video' => ['title'], 'subtitle' => ['description']],
@@ -181,7 +199,7 @@ class ChatContentTree
 
             foreach ($ids as $id) {
                 $chain = $this->ancestors($domain, $level, (int) $id);
-                if ($chain === []) {
+                if ($chain === [] || ! in_array($chain[0]['level'], self::ROOT_LEVELS[$domain] ?? [], true)) {
                     continue;
                 }
 
