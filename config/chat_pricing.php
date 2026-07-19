@@ -7,8 +7,8 @@
  */
 return [
     'default' => [
-        'input' => 0.10,
-        'output' => 0.40,
+        'input' => 0.25,
+        'output' => 1.50,
     ],
 
     'models' => [
