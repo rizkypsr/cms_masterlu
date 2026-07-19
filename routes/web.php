@@ -3,6 +3,7 @@
 use App\Http\Controllers\AudioCategoryController;
 use App\Http\Controllers\BookCategoryController;
 use App\Http\Controllers\ChatCategoryController;
+use App\Http\Controllers\ChatConversationController;
 use App\Http\Controllers\Topic2Controller;
 use App\Http\Controllers\TopicController;
 use App\Http\Controllers\VideoCategoryController;
@@ -119,6 +120,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('chatbot/kategori/{chatCategory}/scope/toggle', [ChatCategoryController::class, 'toggleScope'])->name('chatbot.kategori.scope.toggle');
     Route::get('chatbot/content-tree/{domain}/children', [ChatCategoryController::class, 'treeChildren'])->name('chatbot.content-tree.children');
     Route::get('chatbot/content-tree/{domain}/search', [ChatCategoryController::class, 'treeSearch'])->name('chatbot.content-tree.search');
+
+    // Chat - conversation tracking & token cost (chat_conversation / chat_message)
+    Route::get('chat', [ChatConversationController::class, 'index'])->name('chat.index');
+    Route::get('chat/report', [ChatConversationController::class, 'report'])->name('chat.report');
+    Route::get('chat/{chatConversation}', [ChatConversationController::class, 'show'])->name('chat.show');
 
     // Topic2 Routes (like Book structure)
     Route::get('topic2/{topic2?}', [Topic2Controller::class, 'index'])->name('topic2.index');

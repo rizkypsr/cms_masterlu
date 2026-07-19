@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Pengguna extends Model
 {
@@ -61,6 +62,21 @@ class Pengguna extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
+    }
+
+    public function chatConversations(): HasMany
+    {
+        return $this->hasMany(ChatConversation::class, 'pengguna_id');
+    }
+
+    public function chatMessages(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            ChatMessage::class,
+            ChatConversation::class,
+            'pengguna_id',
+            'conversation_id',
+        );
     }
 
     /**

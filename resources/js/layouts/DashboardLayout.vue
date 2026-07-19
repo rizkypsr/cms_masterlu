@@ -68,6 +68,15 @@ const navItems = [
             { label: 'Kategori', href: '/chatbot/kategori' },
         ],
     },
+    {
+        label: 'Chat',
+        href: '#',
+        hasDropdown: true,
+        items: [
+            { label: 'Percakapan', href: '/chat' },
+            { label: 'Laporan Cost', href: '/chat/report' },
+        ],
+    },
     { label: 'Bookmark', href: '/public-bookmark' },
     { label: 'Informasi', href: '/information' },
     { label: 'Unduh', href: '/unduh' },
