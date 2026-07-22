@@ -30,7 +30,8 @@ class ChatContentTree
             'content' => ['book_contents', null, null],
         ],
         'video' => [
-            'category' => ['video_category', null, null],
+            'category' => ['category', 'type', 'video'],
+            'sub_category' => ['video_category', null, null],
             'video' => ['video', null, null],
             'subtitle' => ['video_subtitle', null, null],
         ],
@@ -83,7 +84,7 @@ class ChatContentTree
 
     private const SEARCH_COLUMNS = [
         'book' => ['category' => ['title'], 'book' => ['title'], 'chapter' => ['title'], 'content' => ['content']],
-        'video' => ['category' => ['title'], 'video' => ['title'], 'subtitle' => ['description']],
+        'video' => ['category' => ['title'], 'sub_category' => ['title'], 'video' => ['title'], 'subtitle' => ['description']],
         'audio' => ['category' => ['title'], 'sub_group' => ['name'], 'audio' => ['title'], 'subtitle' => ['title', 'description']],
         'topics' => ['topic' => ['title'], 'topic_category' => ['title'], 'subtitle' => ['title', 'description']],
         'topics2' => ['root' => ['title'], 'chapter' => ['title'], 'content' => ['content']],
@@ -149,7 +150,8 @@ class ChatContentTree
             'book.category' => $this->bookOfCategory($nodeId),
             'book.book' => $this->chaptersOfBook($nodeId),
             'book.chapter' => $this->bookChapterChildren($nodeId),
-            'video.category' => $this->videoCategoryChildren($nodeId),
+            'video.category' => $this->videoTopCategoryChildren($nodeId),
+            'video.sub_category' => $this->videoSubCategoryChildren($nodeId),
             'video.video' => $this->videoChildren($nodeId),
             'audio.category' => $this->audioCategoryChildren($nodeId),
             'audio.sub_group' => $this->audioOfSubGroup($nodeId),
@@ -201,6 +203,16 @@ class ChatContentTree
                 $chain = $this->ancestors($domain, $level, (int) $id);
                 if ($chain === [] || ! in_array($chain[0]['level'], self::ROOT_LEVELS[$domain] ?? [], true)) {
                     continue;
+                }
+
+                // Audio's tree only covers the `languange = 'CH'` branch (see
+                // audioRoots()); an ID-branch category is a real row but has
+                // no path back to any displayed root — skip it too.
+                if ($domain === 'audio' && $chain[0]['level'] === 'category') {
+                    $lang = DB::table('category')->where('id', $chain[0]['node_id'])->value('languange');
+                    if ($lang !== 'CH') {
+                        continue;
+                    }
                 }
 
                 $results[] = [
@@ -271,19 +283,33 @@ class ChatContentTree
 
     // ---- VIDEO ----
 
+    /**
+     * True roots: `category` (type=video), self-nested via parent_id — same
+     * table/pattern as Video/Index.vue's "Daftar Isi"/"Topik" tree. Spans
+     * both CH and ID `languange` rows; the scope editor isn't language-scoped.
+     */
     private function videoRoots(): array
     {
-        $rows = DB::table('video_category')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $rows = DB::table('category')->where('type', 'video')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
 
-        return $this->mapVideoCategories($rows);
+        return $this->mapVideoTopCategories($rows);
     }
 
-    private function videoCategoryChildren(int $categoryId): array
+    private function videoTopCategoryChildren(int $categoryId): array
     {
-        $subCats = DB::table('video_category')->where('parent_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
-        $videos = DB::table('video')->where('video_category_id', $categoryId)->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $subCats = DB::table('category')->where('type', 'video')->where('parent_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        // video_category links back to its owning `category` row via sub_category_id, not parent_id.
+        $videoCats = DB::table('video_category')->where('sub_category_id', $categoryId)->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
 
-        return array_merge($this->mapVideoCategories($subCats), $this->mapVideos($videos));
+        return array_merge($this->mapVideoTopCategories($subCats), $this->mapVideoSubCategories($videoCats));
+    }
+
+    private function videoSubCategoryChildren(int $subCategoryId): array
+    {
+        $subCats = DB::table('video_category')->where('parent_id', $subCategoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $videos = DB::table('video')->where('video_category_id', $subCategoryId)->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+
+        return array_merge($this->mapVideoSubCategories($subCats), $this->mapVideos($videos));
     }
 
     private function videoChildren(int $videoId): array
@@ -300,13 +326,25 @@ class ChatContentTree
     /**
      * @param  \Illuminate\Support\Collection<int, object>  $rows
      */
-    private function mapVideoCategories($rows): array
+    private function mapVideoTopCategories($rows): array
+    {
+        $ids = $rows->pluck('id')->all();
+        $hasSub = $this->hasChildrenSet('category', 'parent_id', $ids, 'type', 'video');
+        $hasVideoCat = $this->hasChildrenSet('video_category', 'sub_category_id', $ids);
+
+        return $rows->map(fn ($r) => $this->node('video', 'category', $r->id, $r->title, isset($hasSub[$r->id]) || isset($hasVideoCat[$r->id])))->all();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $rows
+     */
+    private function mapVideoSubCategories($rows): array
     {
         $ids = $rows->pluck('id')->all();
         $hasSub = $this->hasChildrenSet('video_category', 'parent_id', $ids);
         $hasVideo = $this->hasChildrenSet('video', 'video_category_id', $ids);
 
-        return $rows->map(fn ($r) => $this->node('video', 'category', $r->id, $r->title, isset($hasSub[$r->id]) || isset($hasVideo[$r->id])))->all();
+        return $rows->map(fn ($r) => $this->node('video', 'sub_category', $r->id, $r->title, isset($hasSub[$r->id]) || isset($hasVideo[$r->id])))->all();
     }
 
     /**
@@ -323,16 +361,21 @@ class ChatContentTree
 
     // ---- AUDIO ----
 
+    /**
+     * Mirrors /audio/daftar-isi (AudioCategoryController::daftarIsi): only
+     * the `languange = 'CH'` branch of `category` — the ID branch ("Topik")
+     * is a separate admin view over the same table and isn't included here.
+     */
     private function audioRoots(): array
     {
-        $rows = DB::table('category')->where('type', 'audio')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $rows = DB::table('category')->where('type', 'audio')->where('languange', 'CH')->whereNull('parent_id')->orderBy('seq')->orderBy('id')->get(['id', 'title']);
 
         return $this->mapAudioCategories($rows);
     }
 
     private function audioCategoryChildren(int $categoryId): array
     {
-        $subCats = DB::table('category')->where('type', 'audio')->where('parent_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
+        $subCats = DB::table('category')->where('type', 'audio')->where('languange', 'CH')->where('parent_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'title']);
         $subGroups = DB::table('audio_sub_group')->where('audio_category_id', $categoryId)->orderBy('seq')->orderBy('id')->get(['id', 'name']);
 
         $hasAudio = $this->hasChildrenSet('audio', 'audio_sub_group_id', $subGroups->pluck('id')->all());
@@ -364,7 +407,14 @@ class ChatContentTree
     private function mapAudioCategories($rows): array
     {
         $ids = $rows->pluck('id')->all();
-        $hasSub = $this->hasChildrenSet('category', 'parent_id', $ids, 'type', 'audio');
+        $hasSub = $ids === [] ? [] : DB::table('category')
+            ->whereIn('parent_id', $ids)
+            ->where('type', 'audio')
+            ->where('languange', 'CH')
+            ->distinct()
+            ->pluck('parent_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])
+            ->all();
         $hasGroup = $this->hasChildrenSet('audio_sub_group', 'audio_category_id', $ids);
 
         return $rows->map(fn ($r) => $this->node('audio', 'category', $r->id, $r->title, isset($hasSub[$r->id]) || isset($hasGroup[$r->id])))->all();
@@ -526,7 +576,8 @@ class ChatContentTree
             'book.book' => $this->bookRefs($nodeId),
             'book.chapter' => $this->bookChapterRefs($nodeId),
             'book.content' => $this->bookContentRefs($nodeId),
-            'video.category' => $this->refChain('video_category', 'parent_id', $nodeId, 'video', 'category'),
+            'video.category' => $this->refChain('category', 'parent_id', $nodeId, 'video', 'category'),
+            'video.sub_category' => $this->videoSubCategoryRefs($nodeId),
             'video.video' => $this->videoRefs($nodeId),
             'video.subtitle' => $this->videoSubtitleRefs($nodeId),
             'audio.category' => $this->refChain('category', 'parent_id', $nodeId, 'audio', 'category'),
@@ -662,6 +713,28 @@ class ChatContentTree
     }
 
     /**
+     * Category chain (video_category, self-nested) up to its own root, then
+     * prefixed with the true owning `category` (type=video) chain, resolved
+     * via the root video_category's sub_category_id.
+     *
+     * @return list<array{domain: string, level: string, node_id: int, label: string}>
+     */
+    private function videoSubCategoryRefs(int $subCategoryId): array
+    {
+        $subCatChain = $this->refChain('video_category', 'parent_id', $subCategoryId, 'video', 'sub_category');
+        if ($subCatChain === []) {
+            return [];
+        }
+
+        $root = DB::table('video_category')->where('id', $subCatChain[0]['node_id'])->first(['sub_category_id']);
+        $topChain = $root && $root->sub_category_id
+            ? $this->refChain('category', 'parent_id', (int) $root->sub_category_id, 'video', 'category')
+            : [];
+
+        return array_merge($topChain, $subCatChain);
+    }
+
+    /**
      * @return list<array{domain: string, level: string, node_id: int, label: string}>
      */
     private function videoRefs(int $videoId): array
@@ -676,9 +749,10 @@ class ChatContentTree
         // it from there rather than from the leaf.
         $topVideoId = $videoChain[0]['node_id'];
         $top = DB::table('video')->where('id', $topVideoId)->first(['video_category_id']);
-        $categoryId = $top !== null && $top->video_category_id ? (int) $top->video_category_id : null;
 
-        $catChain = $this->refChain('video_category', 'parent_id', $categoryId, 'video', 'category');
+        $catChain = $top !== null && $top->video_category_id
+            ? $this->videoSubCategoryRefs((int) $top->video_category_id)
+            : [];
 
         return array_merge($catChain, $videoChain);
     }
