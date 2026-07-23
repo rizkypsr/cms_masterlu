@@ -2,6 +2,7 @@
 import { Icon } from '@iconify/vue';
 import { Head, usePage, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import TiptapEditor from '@/components/TiptapEditor.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -33,6 +34,7 @@ interface ChatCategory {
     seq: number;
     is_active: boolean;
     parent_id: number | null;
+    description: string | null;
     items_count?: number;
     children?: ChatCategory[];
 }
@@ -57,6 +59,7 @@ const form = useForm({
     parent_id: null as number | null,
     seq: null as number | null,
     is_active: true as boolean,
+    description: '' as string,
 });
 
 // A row is a leaf (selectable) only when it has no active children.
@@ -120,6 +123,7 @@ const openEdit = (item: ChatCategory, parent?: ChatCategory) => {
     form.name = item.name;
     form.parent_id = item.parent_id;
     form.is_active = item.is_active;
+    form.description = item.description ?? '';
     const list = parent ? parent.children || [] : props.categories;
     form.seq = list.findIndex((c) => c.id === item.id) + 1 || null;
     modalOpen.value = true;
@@ -260,6 +264,25 @@ const handleDelete = () => {
                                     >
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="text-sm text-gray-600">{{ child.name }}</span>
+                                            <Popover>
+                                                <PopoverTrigger as-child>
+                                                    <button
+                                                        type="button"
+                                                        class="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-[#337ab7]"
+                                                        title="Deskripsi"
+                                                    >
+                                                        <Icon icon="mdi:information-outline" class="h-4 w-4" />
+                                                    </button>
+                                                </PopoverTrigger>
+                                                <PopoverContent class="w-72 text-sm text-gray-600">
+                                                    <div
+                                                        v-if="child.description"
+                                                        class="prose prose-sm max-w-none [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+                                                        v-html="child.description"
+                                                    />
+                                                    <span v-else>Belum ada deskripsi.</span>
+                                                </PopoverContent>
+                                            </Popover>
                                             <span
                                                 v-if="!child.is_active"
                                                 class="rounded bg-gray-200 px-2 py-0.5 text-xs text-gray-500"
@@ -370,6 +393,11 @@ const handleDelete = () => {
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700">Deskripsi</label>
+                            <TiptapEditor v-model="form.description" height="150px" />
                         </div>
 
                         <label class="flex items-center gap-2 text-sm text-gray-700">

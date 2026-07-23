@@ -16,6 +16,7 @@ class ChatCategory extends Model
         'seq',
         'is_active',
         'parent_id',
+        'description',
     ];
 
     protected $casts = [

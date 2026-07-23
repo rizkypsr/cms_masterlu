@@ -57,6 +57,7 @@ class ChatCategoryController extends Controller
             'types' => $validated['types'],
             'is_active' => $validated['is_active'],
             'parent_id' => $validated['parent_id'],
+            'description' => $validated['description'],
             'seq' => $newSeq,
         ]);
 
@@ -77,6 +78,7 @@ class ChatCategoryController extends Controller
             'name' => $validated['name'],
             'types' => $validated['types'],
             'is_active' => $validated['is_active'],
+            'description' => $validated['description'],
         ]);
 
         return back();
@@ -246,7 +248,7 @@ class ChatCategoryController extends Controller
     }
 
     /**
-     * @return array{name: string, types: string, is_active: bool, parent_id: int|null}
+     * @return array{name: string, types: string, is_active: bool, parent_id: int|null, description: string|null}
      */
     private function validateData(Request $request): array
     {
@@ -255,7 +257,10 @@ class ChatCategoryController extends Controller
             'parent_id' => 'nullable|exists:chat_category,id',
             'seq' => 'nullable|integer',
             'is_active' => 'boolean',
+            'description' => 'nullable|string',
         ]);
+
+        $description = $request->string('description')->trim()->value();
 
         return [
             // `types` is a dead legacy column; scope now lives in chat_category_item.
@@ -263,6 +268,7 @@ class ChatCategoryController extends Controller
             'types' => '',
             'is_active' => $request->boolean('is_active'),
             'parent_id' => $request->input('parent_id'),
+            'description' => $description === '' ? null : $description,
         ];
     }
 
