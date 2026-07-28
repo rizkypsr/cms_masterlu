@@ -29,6 +29,7 @@ interface UserPlan {
     name: string;
     label: string;
     daily_limit: number;
+    duration_days: number | null;
 }
 
 interface UserRow {
@@ -454,7 +455,7 @@ const activePlans = props.plans.filter((p) => p.is_active);
                                             Set
                                         </button>
                                         <button
-                                            v-if="row.plan"
+                                            v-if="row.plan && row.plan.duration_days !== null"
                                             @click="openExtendConfirm(row)"
                                             class="flex h-7 w-7 items-center justify-center rounded bg-[#5cb85c] text-white hover:bg-[#4cae4c]"
                                             title="Perpanjang"

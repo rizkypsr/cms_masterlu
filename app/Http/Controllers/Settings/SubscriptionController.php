@@ -51,6 +51,7 @@ class SubscriptionController extends Controller
                     'name' => $user->plan->name,
                     'label' => $user->plan->label,
                     'daily_limit' => $user->plan->daily_limit,
+                    'duration_days' => $user->plan->duration_days,
                 ] : null,
                 'plan_started_at' => $user->plan_started_at?->toIso8601String(),
                 'plan_expires_at' => $user->plan_expires_at?->toIso8601String(),
@@ -153,6 +154,13 @@ class SubscriptionController extends Controller
     {
         if ($pengguna->plan_id === null) {
             return back()->with('error', 'Pengguna belum punya plan');
+        }
+
+        // `?->` can't tell "plan relation missing" apart from "duration_days
+        // is genuinely null" (unlimited plan, e.g. free) — both collapse to
+        // null. Only fall back to 30 when the plan row itself is gone.
+        if ($pengguna->plan !== null && $pengguna->plan->duration_days === null) {
+            return back()->with('error', 'Plan ini berlaku selamanya, tidak perlu diperpanjang.');
         }
 
         $days = $pengguna->plan?->duration_days ?? 30;
