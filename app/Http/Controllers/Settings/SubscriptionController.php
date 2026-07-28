@@ -38,6 +38,7 @@ class SubscriptionController extends Controller
                 });
             })
             ->orderByRaw('plan_expires_at IS NULL, plan_expires_at ASC')
+            ->orderBy('id')
             ->paginate(10, ['id', 'nama', 'email', 'username', 'plan_id', 'plan_started_at', 'plan_expires_at'])
             ->withQueryString()
             ->through(fn (Pengguna $user): array => [
