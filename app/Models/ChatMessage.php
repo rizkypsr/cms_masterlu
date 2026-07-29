@@ -20,6 +20,7 @@ class ChatMessage extends Model
         'flagged',
         'model',
         'prompt_tokens',
+        'cached_input_tokens',
         'completion_tokens',
         'total_tokens',
     ];
@@ -27,6 +28,7 @@ class ChatMessage extends Model
     protected $casts = [
         'flagged' => 'boolean',
         'prompt_tokens' => 'integer',
+        'cached_input_tokens' => 'integer',
         'completion_tokens' => 'integer',
         'total_tokens' => 'integer',
         'created_at' => 'datetime',
@@ -37,8 +39,12 @@ class ChatMessage extends Model
         return $this->belongsTo(ChatConversation::class, 'conversation_id');
     }
 
-    public function costUsd(): float
+    /**
+     * Milli-rupiah this message costs at its model's active rate.
+     * Null when no rate covers the model — the chat API bills nothing then.
+     */
+    public function costMrp(): ?float
     {
-        return ChatCost::usd($this->model, $this->prompt_tokens, $this->completion_tokens);
+        return ChatCost::mrp($this->model, $this->prompt_tokens, $this->cached_input_tokens, $this->completion_tokens);
     }
 }

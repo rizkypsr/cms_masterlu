@@ -29,6 +29,7 @@ class Pengguna extends Model
         'plan_id',
         'plan_started_at',
         'plan_expires_at',
+        'deposit_balance_mrp',
     ];
 
     protected $hidden = [
@@ -40,6 +41,8 @@ class Pengguna extends Model
         'row_status' => 'integer',
         'plan_started_at' => 'datetime',
         'plan_expires_at' => 'datetime',
+        'deposit_balance_mrp' => 'integer',
+        'is_admin' => 'boolean',
     ];
 
     // Social media constants
@@ -67,6 +70,16 @@ class Pengguna extends Model
     public function chatConversations(): HasMany
     {
         return $this->hasMany(ChatConversation::class, 'pengguna_id');
+    }
+
+    public function depositLedger(): HasMany
+    {
+        return $this->hasMany(DepositLedger::class, 'pengguna_id');
+    }
+
+    public function depositTopups(): HasMany
+    {
+        return $this->hasMany(DepositTopup::class, 'pengguna_id');
     }
 
     public function chatMessages(): HasManyThrough

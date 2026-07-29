@@ -77,6 +77,17 @@ const navItems = [
             { label: 'Laporan Cost', href: '/chat/report' },
         ],
     },
+    {
+        label: 'Deposit',
+        href: '#',
+        hasDropdown: true,
+        items: [
+            { label: 'Antrean Topup', href: '/deposit' },
+            { label: 'Saldo Pengguna', href: '/deposit/saldo' },
+            { label: 'Tarif AI', href: '/deposit/tarif' },
+            { label: 'Laporan', href: '/deposit/laporan' },
+        ],
+    },
     { label: 'Bookmark', href: '/public-bookmark' },
     { label: 'Informasi', href: '/information' },
     { label: 'Unduh', href: '/unduh' },
@@ -99,7 +110,6 @@ const navItems = [
             { label: 'Notif Schedule', href: '#' },
             { label: 'Data Migration', href: '/admin/data-migration' },
             { label: 'Backup Database', href: '/settings/database-backup' },
-            { label: 'Subscription', href: '/settings/subscription' },
         ],
     },
 ];

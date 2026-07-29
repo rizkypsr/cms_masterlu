@@ -10,9 +10,11 @@ interface ChatMessageRow {
     flagged: boolean;
     model: string | null;
     prompt_tokens: number | null;
+    cached_input_tokens: number | null;
     completion_tokens: number | null;
     total_tokens: number | null;
-    cost_usd: number | null;
+    cost_rp: number | null;
+    cost_source: 'ledger' | 'rate' | null;
     created_at: string | null;
 }
 
@@ -28,7 +30,8 @@ defineProps<{
     conversation: ConversationDetail;
     messages: ChatMessageRow[];
     total_tokens: number;
-    total_cost_usd: number;
+    total_cost_rp: number;
+    unpricedModels: string[];
 }>();
 
 const page = usePage();
@@ -45,7 +48,8 @@ const formatDate = (value: string | null) => {
     });
 };
 
-const formatUsd = (value: number | null) => (value === null ? '-' : `$${value.toFixed(4)}`);
+const formatRp = (value: number | null) =>
+    value === null ? '-' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value);
 </script>
 
 <template>
@@ -87,7 +91,7 @@ const formatUsd = (value: number | null) => (value === null ? '-' : `$${value.to
                 </div>
                 <div class="border-l border-gray-100 pl-4">
                     <div class="text-xs text-gray-500">Total Cost</div>
-                    <div class="font-mono text-lg font-medium text-gray-700">{{ formatUsd(total_cost_usd) }}</div>
+                    <div class="font-mono text-lg font-medium text-gray-700">{{ formatRp(total_cost_rp) }}</div>
                 </div>
             </div>
 
@@ -123,9 +127,20 @@ const formatUsd = (value: number | null) => (value === null ? '-' : `$${value.to
                         >
                             <span>{{ message.model }}</span>
                             <span>prompt: {{ message.prompt_tokens ?? 0 }}</span>
+                            <span v-if="message.cached_input_tokens">cache: {{ message.cached_input_tokens }}</span>
                             <span>completion: {{ message.completion_tokens ?? 0 }}</span>
                             <span>total: {{ message.total_tokens ?? 0 }}</span>
-                            <span class="font-mono">{{ formatUsd(message.cost_usd) }}</span>
+                            <span
+                                class="font-medium"
+                                :title="
+                                    message.cost_source === 'ledger'
+                                        ? 'Yang benar-benar ditagihkan (dari buku besar)'
+                                        : 'Perkiraan dari tarif aktif — belum ada baris buku besar'
+                                "
+                            >
+                                {{ formatRp(message.cost_rp) }}
+                                <span v-if="message.cost_source === 'rate'" class="font-normal text-gray-400">(est.)</span>
+                            </span>
                         </div>
                     </div>
                 </div>
