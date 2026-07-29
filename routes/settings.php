@@ -47,6 +47,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deposit/tarif', [DepositController::class, 'rates'])->name('deposit.tarif');
     Route::post('deposit/tarif', [DepositController::class, 'storeRate'])->name('deposit.tarif.store');
 
+    Route::get('deposit/pembayaran', [DepositController::class, 'paymentInfo'])->name('deposit.pembayaran');
+    Route::post('deposit/pembayaran', [DepositController::class, 'storePaymentInfo'])->name('deposit.pembayaran.store');
+    Route::put('deposit/pembayaran/{depositTopupInfo}', [DepositController::class, 'updatePaymentInfo'])->name('deposit.pembayaran.update');
+    Route::post('deposit/pembayaran/{depositTopupInfo}/activate', [DepositController::class, 'activatePaymentInfo'])->name('deposit.pembayaran.activate');
+    Route::delete('deposit/pembayaran/{depositTopupInfo}', [DepositController::class, 'destroyPaymentInfo'])->name('deposit.pembayaran.destroy');
+
     Route::get('deposit/laporan', [DepositController::class, 'report'])->name('deposit.laporan');
     Route::post('deposit/free-quota', [DepositController::class, 'updateFreeQuota'])->name('deposit.free-quota');
 

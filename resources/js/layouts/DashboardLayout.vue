@@ -84,6 +84,7 @@ const navItems = [
         items: [
             { label: 'Antrean Topup', href: '/deposit' },
             { label: 'Saldo Pengguna', href: '/deposit/saldo' },
+            { label: 'Format Pembayaran', href: '/deposit/pembayaran' },
             { label: 'Tarif AI', href: '/deposit/tarif' },
             { label: 'Laporan', href: '/deposit/laporan' },
         ],

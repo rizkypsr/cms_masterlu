@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AiRate;
 use App\Models\DepositLedger;
 use App\Models\DepositTopup;
+use App\Models\DepositTopupInfo;
 use App\Models\Pengguna;
 use App\Models\SubscriptionPlan;
+use App\Support\HtmlSanitizer;
 use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -486,6 +488,124 @@ class DepositController extends Controller
         });
 
         return back()->with('success', 'Tarif baru ditambahkan. Berlaku paling lambat 5 menit (ada cache tarif).');
+    }
+
+    /**
+     * Payment instructions served to users when they request a topup.
+     */
+    public function paymentInfo(): Response
+    {
+        $rows = DepositTopupInfo::query()
+            ->with('editor:id,name')
+            ->ordered()
+            ->get()
+            ->map(fn (DepositTopupInfo $i): array => [
+                'id' => $i->id,
+                'wa_number' => $i->wa_number,
+                'wa_link' => $i->waLink(),
+                'description' => $i->description,
+                'is_active' => $i->is_active,
+                'seq' => $i->seq,
+                'updated_by' => $i->editor?->name,
+                'updated_at' => $i->updated_at?->toIso8601String(),
+            ]);
+
+        return Inertia::render('Deposit/Pembayaran', [
+            'infos' => $rows,
+        ]);
+    }
+
+    public function storePaymentInfo(Request $request): RedirectResponse
+    {
+        $validated = $this->validatePaymentInfo($request);
+
+        $this->savePaymentInfo(new DepositTopupInfo, $validated, $request->boolean('is_active'));
+
+        return back()->with('success', 'Format pembayaran ditambahkan.');
+    }
+
+    public function updatePaymentInfo(Request $request, DepositTopupInfo $depositTopupInfo): RedirectResponse
+    {
+        $validated = $this->validatePaymentInfo($request);
+
+        $this->savePaymentInfo($depositTopupInfo, $validated, $request->boolean('is_active'));
+
+        return back()->with('success', 'Format pembayaran diperbarui.');
+    }
+
+    /**
+     * Make one row the served copy; the rest stay as fallbacks.
+     */
+    public function activatePaymentInfo(DepositTopupInfo $depositTopupInfo): RedirectResponse
+    {
+        DB::transaction(function () use ($depositTopupInfo): void {
+            DepositTopupInfo::where('id', '!=', $depositTopupInfo->id)->update(['is_active' => false]);
+            $depositTopupInfo->update(['is_active' => true, 'updated_by' => auth()->id()]);
+        });
+
+        return back()->with('success', 'Format ini sekarang yang ditampilkan ke pengguna.');
+    }
+
+    public function destroyPaymentInfo(DepositTopupInfo $depositTopupInfo): RedirectResponse
+    {
+        if ($depositTopupInfo->is_active) {
+            return back()->with('error', 'Format yang sedang aktif tidak bisa dihapus. Aktifkan format lain dulu.');
+        }
+
+        $depositTopupInfo->delete();
+
+        return back()->with('success', 'Format pembayaran dihapus.');
+    }
+
+    /**
+     * @return array{wa_number: string, description: string, seq: int}
+     */
+    private function validatePaymentInfo(Request $request): array
+    {
+        $validated = $request->validate([
+            // Free-format on purpose; digits are extracted for the wa.me link.
+            'wa_number' => 'required|string|max:32',
+            'description' => 'required|string|max:20000',
+            'seq' => 'nullable|integer|min:0',
+            'is_active' => 'boolean',
+        ]);
+
+        $waDigits = preg_replace('/\D+/', '', $validated['wa_number']) ?? '';
+
+        if (strlen($waDigits) < 8) {
+            abort(422, 'Nomor WhatsApp tidak valid.');
+        }
+
+        return [
+            'wa_number' => trim($validated['wa_number']),
+            // Rendered as HTML in the user app, so it is sanitised on write —
+            // never trust that every reader will escape it.
+            'description' => HtmlSanitizer::clean($validated['description']),
+            'seq' => $validated['seq'] ?? 0,
+        ];
+    }
+
+    /**
+     * @param  array{wa_number: string, description: string, seq: int}  $data
+     */
+    private function savePaymentInfo(DepositTopupInfo $info, array $data, bool $active): void
+    {
+        DB::transaction(function () use ($info, $data, $active): void {
+            if ($active) {
+                DepositTopupInfo::where('id', '!=', $info->id ?? 0)->update(['is_active' => false]);
+            }
+
+            $info->fill($data + [
+                'is_active' => $active,
+                'updated_by' => auth()->id(),
+            ])->save();
+
+            // Never leave users with no instructions: if nothing is active
+            // after this save, the row just written becomes the served one.
+            if (! DepositTopupInfo::where('is_active', true)->exists()) {
+                $info->update(['is_active' => true]);
+            }
+        });
     }
 
     /**
