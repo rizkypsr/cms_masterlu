@@ -117,6 +117,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Chatbot - Scope editor (chat_category_item, lazy content tree)
     Route::get('chatbot/kategori/{chatCategory}/scope', [ChatCategoryController::class, 'scope'])->name('chatbot.kategori.scope');
     Route::get('chatbot/kategori/{chatCategory}/scope/items', [ChatCategoryController::class, 'scopeItems'])->name('chatbot.kategori.scope.items');
+    Route::delete('chatbot/kategori/{chatCategory}/stale-items', [ChatCategoryController::class, 'destroyStaleItems'])->name('chatbot.kategori.stale-items.destroy');
     Route::post('chatbot/kategori/{chatCategory}/scope/toggle', [ChatCategoryController::class, 'toggleScope'])->name('chatbot.kategori.scope.toggle');
     Route::get('chatbot/content-tree/{domain}/children', [ChatCategoryController::class, 'treeChildren'])->name('chatbot.content-tree.children');
     Route::get('chatbot/content-tree/{domain}/search', [ChatCategoryController::class, 'treeSearch'])->name('chatbot.content-tree.search');

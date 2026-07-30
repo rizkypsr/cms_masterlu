@@ -14,15 +14,51 @@ class ChatCategoryController extends Controller
 {
     public function index()
     {
-        $categories = ChatCategory::roots()
-            ->ordered()
-            ->withCount('items')
-            ->with(['children' => fn ($query) => $query->ordered()->withCount('items')])
-            ->get();
+        // Whole table in one query, then nested in PHP: depth is unbounded, so
+        // there is no fixed `with('children.children...')` chain that would fit.
+        $all = ChatCategory::query()->ordered()->withCount('items')->get();
 
         return Inertia::render('ChatCategory/Index', [
-            'categories' => $categories,
+            'categories' => $this->buildTree($all),
         ]);
+    }
+
+    /**
+     * Nest a flat, already-ordered collection under $parentId.
+     *
+     * @param  \Illuminate\Support\Collection<int, ChatCategory>  $all
+     * @return list<array<string, mixed>>
+     */
+    private function buildTree($all, ?int $parentId = null): array
+    {
+        return $all
+            ->where('parent_id', $parentId)
+            ->map(function (ChatCategory $c) use ($all): array {
+                $children = $this->buildTree($all, $c->id);
+
+                // Content on a node that has active children is unreachable —
+                // only the deepest node in a branch is served. Resolve those
+                // rows up front so the cleanup dialog needs no extra request;
+                // the condition is a data anomaly, so this is normally empty.
+                $isGroup = collect($children)->contains(fn (array $child): bool => $child['is_active']);
+                $stale = $isGroup && $c->items_count > 0
+                    ? $this->scopeItemList($c)
+                    : [];
+
+                return [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'seq' => $c->seq,
+                    'is_active' => $c->is_active,
+                    'parent_id' => $c->parent_id,
+                    'description' => $c->description,
+                    'items_count' => $c->items_count,
+                    'stale_items' => $stale,
+                    'children' => $children,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     public function store(Request $request)
@@ -68,20 +104,60 @@ class ChatCategoryController extends Controller
     {
         $validated = $this->validateData($request);
 
-        $position = $request->integer('seq');
+        $newParentId = $validated['parent_id'] === null ? null : (int) $validated['parent_id'];
 
-        if ($position) {
-            $this->reorder($chatCategory, $position);
+        if ($this->wouldCycle($chatCategory, $newParentId)) {
+            return back()->with('error', 'Kategori tidak bisa dipindah ke dalam dirinya sendiri atau sub-kategorinya.');
         }
 
+        // Parent is written first so reorder() ranks the row against the
+        // siblings it is actually moving into, not the ones it left.
         $chatCategory->update([
             'name' => $validated['name'],
             'types' => $validated['types'],
             'is_active' => $validated['is_active'],
             'description' => $validated['description'],
+            'parent_id' => $newParentId,
         ]);
 
+        $position = $request->integer('seq');
+
+        if ($position) {
+            $this->reorder($chatCategory->refresh(), $position);
+        }
+
         return back();
+    }
+
+    /**
+     * Whether re-parenting $category under $newParentId would detach a branch
+     * from the root by making it its own ancestor.
+     */
+    private function wouldCycle(ChatCategory $category, ?int $newParentId): bool
+    {
+        if ($newParentId === null) {
+            return false;
+        }
+
+        if ($newParentId === $category->id) {
+            return true;
+        }
+
+        // Walk up from the proposed parent: reaching $category means it sits
+        // inside its own subtree. Cheaper than collecting every descendant.
+        $ancestorId = $newParentId;
+        $guard = 0;
+
+        while ($ancestorId !== null && $guard++ < 100) {
+            if ($ancestorId === $category->id) {
+                return true;
+            }
+
+            $ancestorId = ChatCategory::where('id', $ancestorId)->value('parent_id');
+            $ancestorId = $ancestorId === null ? null : (int) $ancestorId;
+        }
+
+        return false;
     }
 
     public function destroy(ChatCategory $chatCategory)
@@ -90,6 +166,25 @@ class ChatCategoryController extends Controller
         $chatCategory->delete();
 
         return back();
+    }
+
+    /**
+     * Drop content left attached to a category that has since gained children.
+     *
+     * Such rows are unreachable: only the deepest node in a branch is served,
+     * so the scope editor refuses to open for a group and there is otherwise no
+     * way to clear them.
+     */
+    public function destroyStaleItems(ChatCategory $chatCategory)
+    {
+        // A leaf's items are live content — never delete those from here.
+        if ($chatCategory->isLeaf()) {
+            return back()->with('error', 'Kategori ini tidak punya sub-kategori, jadi kontennya masih terpakai. Kelola lewat halaman Kelola Konten.');
+        }
+
+        $deleted = $chatCategory->items()->delete();
+
+        return back()->with('success', "{$deleted} konten nyangkut dihapus dari \"{$chatCategory->name}\".");
     }
 
     /**
