@@ -320,12 +320,12 @@ const parentWillBecomeGroup = computed(() => {
 
         <!-- Modal -->
         <Dialog :open="modalOpen" @update:open="modalOpen = $event">
-            <DialogContent class="top-[10%] max-h-[85vh] max-w-[95vw] translate-y-0 overflow-y-auto sm:max-w-md">
+            <DialogContent class="top-[10%] max-h-[85vh] max-w-[95vw] translate-y-0 overflow-x-hidden overflow-y-auto sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle class="truncate">{{ modalTitle }}</DialogTitle>
+                    <DialogTitle class="pr-6 break-words">{{ modalTitle }}</DialogTitle>
                 </DialogHeader>
 
-                <div class="w-full py-4">
+                <div class="w-full min-w-0 py-4">
                     <!-- Add/Edit -->
                     <form
                         v-if="modalType === 'add' || modalType === 'edit'"
@@ -350,7 +350,7 @@ const parentWillBecomeGroup = computed(() => {
                                         :aria-expanded="parentPickerOpen"
                                         class="w-full justify-between overflow-hidden"
                                     >
-                                        <span class="truncate">{{ selectedParentLabel }}</span>
+                                        <span class="min-w-0 flex-1 truncate text-left">{{ selectedParentLabel }}</span>
                                         <Icon icon="mdi:unfold-more-horizontal" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -397,10 +397,10 @@ const parentWillBecomeGroup = computed(() => {
 
                         <div
                             v-if="parentWillBecomeGroup"
-                            class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700"
+                            class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs break-words text-amber-700"
                         >
                             <Icon icon="mdi:alert-outline" class="mt-0.5 h-4 w-4 shrink-0" />
-                            <span>
+                            <span class="min-w-0">
                                 <strong>{{ parentWillBecomeGroup.name }}</strong> punya
                                 {{ parentWillBecomeGroup.items_count }} konten. Setelah punya sub-kategori, dia jadi
                                 pengelompokan saja dan konten itu tidak lagi disajikan ke pengguna — pindahkan kontennya
@@ -418,7 +418,7 @@ const parentWillBecomeGroup = computed(() => {
                                         :aria-expanded="comboboxOpen"
                                         class="w-full justify-between overflow-hidden"
                                     >
-                                        <span class="truncate">{{ selectedUrutanLabel }}</span>
+                                        <span class="min-w-0 flex-1 truncate text-left">{{ selectedUrutanLabel }}</span>
                                         <Icon icon="mdi:unfold-more-horizontal" class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -494,9 +494,9 @@ const parentWillBecomeGroup = computed(() => {
 
         <!-- Stale content on a group category -->
         <Dialog :open="staleOpen" @update:open="staleOpen = $event">
-            <DialogContent class="top-[10%] max-h-[85vh] max-w-[95vw] translate-y-0 overflow-y-auto sm:max-w-lg">
+            <DialogContent class="top-[10%] max-h-[85vh] max-w-[95vw] translate-y-0 overflow-x-hidden overflow-y-auto sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle class="truncate">Konten Tidak Terpakai — {{ staleNode?.name }}</DialogTitle>
+                    <DialogTitle class="pr-6 break-words">Konten Tidak Terpakai — {{ staleNode?.name }}</DialogTitle>
                 </DialogHeader>
 
                 <div class="space-y-4 py-2">
