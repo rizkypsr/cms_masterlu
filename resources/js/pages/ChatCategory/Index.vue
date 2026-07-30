@@ -267,9 +267,10 @@ const handleDelete = () => {
     });
 };
 
-// A node about to gain a child stops serving its own content.
-const parentWillBecomeGroup = computed(() => {
-    if (modalType.value !== 'add') return null;
+// A leaf about to gain its first active child stops serving its own content,
+// so that content is handed down to the new child instead of stranding.
+const parentHandsDownItems = computed(() => {
+    if (modalType.value !== 'add' || !form.is_active) return null;
     const parent = findNode(form.parent_id);
     if (!parent || !parent.items_count) return null;
     return parent.children.some((c) => c.is_active) ? null : parent;
@@ -396,15 +397,15 @@ const parentWillBecomeGroup = computed(() => {
                         </div>
 
                         <div
-                            v-if="parentWillBecomeGroup"
-                            class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs break-words text-amber-700"
+                            v-if="parentHandsDownItems"
+                            class="flex items-start gap-2 rounded border border-blue-200 bg-blue-50 p-3 text-xs break-words text-blue-700"
                         >
-                            <Icon icon="mdi:alert-outline" class="mt-0.5 h-4 w-4 shrink-0" />
+                            <Icon icon="mdi:transfer-down" class="mt-0.5 h-4 w-4 shrink-0" />
                             <span class="min-w-0">
-                                <strong>{{ parentWillBecomeGroup.name }}</strong> punya
-                                {{ parentWillBecomeGroup.items_count }} konten. Setelah punya sub-kategori, dia jadi
-                                pengelompokan saja dan konten itu tidak lagi disajikan ke pengguna — pindahkan kontennya
-                                ke sub-kategori.
+                                <strong>{{ parentHandsDownItems.items_count }} konten</strong> milik
+                                <strong>{{ parentHandsDownItems.name }}</strong> akan dipindahkan ke sub-kategori baru
+                                ini. Setelah punya sub-kategori, induknya jadi pengelompokan saja dan tidak lagi
+                                menyajikan konten sendiri.
                             </span>
                         </div>
 

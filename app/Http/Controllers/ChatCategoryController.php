@@ -88,7 +88,7 @@ class ChatCategoryController extends Controller
             $newSeq = $position;
         }
 
-        ChatCategory::create([
+        $child = ChatCategory::create([
             'name' => $validated['name'],
             'types' => $validated['types'],
             'is_active' => $validated['is_active'],
@@ -97,7 +97,42 @@ class ChatCategoryController extends Controller
             'seq' => $newSeq,
         ]);
 
+        $moved = $this->inheritParentItems($child);
+
+        if ($moved > 0) {
+            return back()->with('success', "{$moved} konten dipindahkan dari kategori induk ke \"{$child->name}\".");
+        }
+
         return back();
+    }
+
+    /**
+     * Hand the parent's content down to a newly created child.
+     *
+     * A category stops being served the moment it gains an active child, so
+     * without this its content would silently strand. Only runs when the parent
+     * was a leaf until now: once it already has other active children there is
+     * no single obvious destination, and the stale-content badge covers it.
+     */
+    private function inheritParentItems(ChatCategory $child): int
+    {
+        // An inactive child leaves the parent a leaf, so its content is still
+        // served and must stay put.
+        if ($child->parent_id === null || ! $child->is_active) {
+            return 0;
+        }
+
+        $parentHadOtherChildren = ChatCategory::where('parent_id', $child->parent_id)
+            ->where('id', '!=', $child->id)
+            ->where('is_active', true)
+            ->exists();
+
+        if ($parentHadOtherChildren) {
+            return 0;
+        }
+
+        return ChatCategoryItem::where('category_id', $child->parent_id)
+            ->update(['category_id' => $child->id]);
     }
 
     public function update(Request $request, ChatCategory $chatCategory)
