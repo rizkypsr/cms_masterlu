@@ -197,10 +197,51 @@ class ChatCategoryController extends Controller
 
     public function destroy(ChatCategory $chatCategory)
     {
-        // FK ON DELETE SET NULL promotes any children to top-level leaves.
-        $chatCategory->delete();
+        // The parent_id FK is ON DELETE SET NULL, so deleting a row on its own
+        // would strand its children at the top level rather than remove them.
+        // Collect the whole branch first, then drop it in one statement.
+        $ids = $this->subtreeIds($chatCategory);
 
-        return back();
+        DB::transaction(function () use ($ids): void {
+            // chat_category_item cascades per row; chat_conversation.category_id
+            // is SET NULL, so users keep their history, minus the label.
+            ChatCategory::whereIn('id', $ids)->delete();
+        });
+
+        $subCount = count($ids) - 1;
+
+        return back()->with(
+            'success',
+            $subCount > 0
+                ? "\"{$chatCategory->name}\" dan {$subCount} sub-kategori di bawahnya dihapus."
+                : "\"{$chatCategory->name}\" dihapus."
+        );
+    }
+
+    /**
+     * A category's id plus every descendant, breadth-first.
+     *
+     * The guard is deliberate: a corrupted parent_id chain (a row that ends up
+     * its own ancestor) would otherwise loop forever.
+     *
+     * @return list<int>
+     */
+    private function subtreeIds(ChatCategory $category): array
+    {
+        $ids = [$category->id];
+        $frontier = [$category->id];
+        $guard = 0;
+
+        while ($frontier !== [] && $guard++ < 100) {
+            $frontier = ChatCategory::whereIn('parent_id', $frontier)
+                ->whereNotIn('id', $ids)
+                ->pluck('id')
+                ->all();
+
+            $ids = array_merge($ids, $frontier);
+        }
+
+        return $ids;
     }
 
     /**

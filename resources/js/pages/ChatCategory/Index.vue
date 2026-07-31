@@ -199,6 +199,27 @@ const openEdit = (item: ChatCategoryNode) => {
     modalOpen.value = true;
 };
 
+// Everything the delete will take with it — sub-categories cascade, and each
+// one drops its chat_category_item rows via the FK.
+const deleteImpact = computed(() => {
+    const target = selectedItem.value;
+    if (!target) return { subCategories: 0, items: 0 };
+
+    const walk = (node: ChatCategoryNode): { subCategories: number; items: number } =>
+        node.children.reduce(
+            (acc, child) => {
+                const nested = walk(child);
+                return {
+                    subCategories: acc.subCategories + 1 + nested.subCategories,
+                    items: acc.items + (child.items_count ?? 0) + nested.items,
+                };
+            },
+            { subCategories: 0, items: target === node ? (node.items_count ?? 0) : 0 },
+        );
+
+    return walk(target);
+});
+
 const openDelete = (item: ChatCategoryNode) => {
     modalType.value = 'delete';
     modalTitle.value = 'Hapus';
@@ -478,15 +499,38 @@ const parentHandsDownItems = computed(() => {
 
                     <!-- Delete -->
                     <div v-else-if="modalType === 'delete'" class="space-y-4">
-                        <p class="text-sm text-gray-600">
-                            Apakah Anda yakin ingin menghapus <strong>{{ selectedItem?.name }}</strong>?
+                        <p class="text-sm break-words text-gray-600">
+                            Hapus <strong>{{ selectedItem?.name }}</strong>?
                         </p>
+
+                        <div
+                            v-if="deleteImpact.subCategories > 0 || deleteImpact.items > 0"
+                            class="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+                        >
+                            <div class="mb-1 flex items-center gap-1 font-medium">
+                                <Icon icon="mdi:alert" class="h-4 w-4 shrink-0" />
+                                Ikut terhapus permanen
+                            </div>
+                            <ul class="list-disc space-y-0.5 pl-5">
+                                <li v-if="deleteImpact.subCategories > 0">
+                                    <strong>{{ deleteImpact.subCategories }}</strong> sub-kategori di bawahnya
+                                </li>
+                                <li v-if="deleteImpact.items > 0">
+                                    <strong>{{ deleteImpact.items }}</strong> konten yang tercakup
+                                </li>
+                            </ul>
+                            <p class="mt-2">Tidak bisa dibatalkan.</p>
+                        </div>
+
                         <p class="text-xs text-gray-500">
-                            Sub-kategori langsungnya akan menjadi kategori tingkat atas, bukan ikut terhapus.
+                            Riwayat percakapan pengguna tidak ikut terhapus — hanya kehilangan label kategorinya.
                         </p>
+
                         <div class="flex justify-end gap-2">
                             <Button variant="outline" @click="modalOpen = false">Batal</Button>
-                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDelete">Hapus</Button>
+                            <Button class="bg-[#d9534f] hover:bg-[#d43f3a]" @click="handleDelete">
+                                {{ deleteImpact.subCategories > 0 ? `Hapus ${deleteImpact.subCategories + 1} kategori` : 'Hapus' }}
+                            </Button>
                         </div>
                     </div>
                 </div>
