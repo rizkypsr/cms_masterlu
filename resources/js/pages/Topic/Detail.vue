@@ -46,6 +46,15 @@ interface AvailableItem {
     source: string;
 }
 
+interface PaginatedAvailable {
+    data: AvailableItem[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+}
+
 interface Category {
     id: number;
     languange: string;
@@ -55,7 +64,9 @@ const props = defineProps<{
     category: Category;
     topicCategory: TopicCategory;
     items: TopicContentItem[];
-    availableItems: AvailableItem[];
+    // Optional Inertia prop: absent until the picker asks for it.
+    availableItems?: PaginatedAvailable;
+    availableFilters: { search: string };
 }>();
 
 const page = usePage();
@@ -65,10 +76,26 @@ const user = page.props.auth?.user;
 // Search for main table
 const searchQuery = ref('');
 
-// Pagination for modal table only
-const modalItemsPerPage = ref(10);
-const modalCurrentPage = ref(1);
+// The picker is searched and paged on the server: the pool is ~18k rows, and
+// shipping it whole exhausted PHP's memory before the page could render.
 const modalSearchQuery = ref('');
+const availableLoading = ref(false);
+
+const loadAvailable = (page = 1) => {
+    availableLoading.value = true;
+    router.reload({
+        only: ['availableItems'],
+        data: { item_search: modalSearchQuery.value || undefined, item_page: page },
+        onFinish: () => (availableLoading.value = false),
+    });
+};
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+const onModalSearch = () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadAvailable(1), 300);
+};
 
 // Filtered items (main table - no pagination, show all)
 const filteredItems = computed(() => {
@@ -79,30 +106,30 @@ const filteredItems = computed(() => {
     );
 });
 
-// Filtered and paginated available items (modal table)
-const filteredAvailableItems = computed(() => {
-    if (!modalSearchQuery.value) return props.availableItems;
-    const query = modalSearchQuery.value.toLowerCase();
-    return props.availableItems.filter(item => 
-        item.title.toLowerCase().includes(query)
-    );
-});
-
-const paginatedAvailableItems = computed(() => {
-    const start = (modalCurrentPage.value - 1) * modalItemsPerPage.value;
-    const end = start + modalItemsPerPage.value;
-    return filteredAvailableItems.value.slice(start, end);
-});
-
-const modalTotalPages = computed(() => Math.ceil(filteredAvailableItems.value.length / modalItemsPerPage.value));
-const modalShowingFrom = computed(() => filteredAvailableItems.value.length === 0 ? 0 : (modalCurrentPage.value - 1) * modalItemsPerPage.value + 1);
-const modalShowingTo = computed(() => Math.min(modalCurrentPage.value * modalItemsPerPage.value, filteredAvailableItems.value.length));
+const paginatedAvailableItems = computed(() => props.availableItems?.data ?? []);
+const modalCurrentPage = computed(() => props.availableItems?.current_page ?? 1);
+const modalTotalPages = computed(() => props.availableItems?.last_page ?? 1);
+const availableTotal = computed(() => props.availableItems?.total ?? 0);
+const modalShowingFrom = computed(() => props.availableItems?.from ?? 0);
+const modalShowingTo = computed(() => props.availableItems?.to ?? 0);
 
 const goToModalPage = (page: number) => {
     if (page >= 1 && page <= modalTotalPages.value) {
-        modalCurrentPage.value = page;
+        loadAvailable(page);
     }
 };
+
+// Only the pages actually shown. The pool runs to ~900 pages, so looping over
+// every one of them just to render five buttons is wasted work each render.
+const modalPageWindow = computed<(number | '...')[]>(() => {
+    const last = modalTotalPages.value;
+    const current = modalCurrentPage.value;
+    const pages = new Set<number>([1, last, current - 1, current, current + 1]);
+
+    const shown = [...pages].filter((p) => p >= 1 && p <= last).sort((a, b) => a - b);
+
+    return shown.flatMap((p, i) => (i > 0 && p - shown[i - 1] > 1 ? ['...' as const, p] : [p]));
+});
 
 // Modal states
 const modalOpen = ref(false);
@@ -202,13 +229,15 @@ const openModal = (type: typeof modalType.value, item?: TopicContentItem) => {
     selectedItem.value = item || null;
     selectedAvailableItem.value = null;
     modalSearchQuery.value = '';
-    modalCurrentPage.value = 1;
 
     switch (type) {
         case 'add':
             modalTitle.value = 'Form Topik';
             form.reset();
             form.seq = props.items.length + 1;
+            // Fetched here rather than with the page, so opening the detail
+            // screen costs nothing when the picker is never used.
+            loadAvailable(1);
             break;
         case 'edit':
             modalTitle.value = 'Edit Data';
@@ -378,38 +407,30 @@ const handleDelete = () => {
 
         <!-- Modal -->
         <Dialog :open="modalOpen" @update:open="modalOpen = $event">
-            <DialogContent class="top-[5%] translate-y-0 sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogContent class="top-[5%] max-h-[90vh] translate-y-0 overflow-y-auto sm:max-w-4xl">
                 <DialogHeader>
                     <DialogTitle>{{ modalTitle }}</DialogTitle>
                 </DialogHeader>
 
-                <div class="flex-1 overflow-hidden py-4">
+                <div class="py-4">
                     <!-- Add Form with Table -->
-                    <form v-if="modalType === 'add'" @submit.prevent="handleSubmit" class="flex h-full flex-col space-y-4">
+                    <form v-if="modalType === 'add'" @submit.prevent="handleSubmit" class="space-y-4">
                         <!-- Controls -->
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <select 
-                                    v-model="modalItemsPerPage" 
-                                    class="rounded border border-gray-300 px-2 py-1 text-sm"
-                                    @change="modalCurrentPage = 1"
-                                >
-                                    <option :value="10">10</option>
-                                    <option :value="25">25</option>
-                                    <option :value="50">50</option>
-                                </select>
-                                <span class="text-sm text-gray-600">items/page</span>
-                            </div>
-                            <Input 
+                            <span class="text-sm text-gray-600">
+                                <span v-if="availableLoading">Memuat...</span>
+                                <span v-else>{{ availableTotal }} item tersedia</span>
+                            </span>
+                            <Input
                                 v-model="modalSearchQuery"
-                                placeholder="Search..."
-                                class="h-8 w-48"
-                                @input="modalCurrentPage = 1"
+                                placeholder="Cari judul / deskripsi / audio..."
+                                class="h-8 w-64"
+                                @input="onModalSearch"
                             />
                         </div>
 
                         <!-- Table -->
-                        <div class="flex-1 overflow-auto border rounded">
+                        <div class="max-h-[45vh] overflow-auto rounded border">
                             <table class="w-full">
                                 <thead class="sticky top-0 bg-gray-50">
                                     <tr class="border-b border-gray-200">
@@ -444,7 +465,7 @@ const handleDelete = () => {
                         <!-- Pagination -->
                         <div class="flex items-center justify-between border-t pt-2">
                             <div class="text-sm text-gray-600">
-                                Showing {{ modalShowingFrom }} to {{ modalShowingTo }} of {{ filteredAvailableItems.length }} entries
+                                Showing {{ modalShowingFrom }} to {{ modalShowingTo }} of {{ availableTotal }} entries
                             </div>
                             <div class="flex items-center gap-1">
                                 <button
@@ -456,26 +477,21 @@ const handleDelete = () => {
                                     Previous
                                 </button>
                                 
-                                <template v-for="page in modalTotalPages" :key="page">
+                                <template v-for="(page, idx) in modalPageWindow" :key="`${page}-${idx}`">
                                     <button
+                                        v-if="page !== '...'"
                                         type="button"
-                                        v-if="page === 1 || page === modalTotalPages || (page >= modalCurrentPage - 1 && page <= modalCurrentPage + 1)"
-                                        @click="goToModalPage(page)"
                                         :class="[
                                             'flex h-8 min-w-[32px] items-center justify-center rounded border px-2 text-sm',
-                                            page === modalCurrentPage 
-                                                ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]' 
-                                                : 'border-gray-300 bg-white hover:bg-gray-50'
+                                            page === modalCurrentPage
+                                                ? 'border-[#337ab7] bg-[#337ab7] text-white hover:bg-[#286090]'
+                                                : 'border-gray-300 bg-white hover:bg-gray-50',
                                         ]"
+                                        @click="goToModalPage(page)"
                                     >
                                         {{ page }}
                                     </button>
-                                    <span 
-                                        v-else-if="page === modalCurrentPage - 2 || page === modalCurrentPage + 2"
-                                        class="flex h-8 w-8 items-center justify-center text-gray-400"
-                                    >
-                                        ...
-                                    </span>
+                                    <span v-else class="flex h-8 w-8 items-center justify-center text-gray-400">...</span>
                                 </template>
 
                                 <button

@@ -409,33 +409,52 @@ class TopicController extends Controller
         $validated['type'] = 'audio'; // Always audio
 
         DB::transaction(function () use ($validated, $categoryId) {
-            if (! isset($validated['seq'])) {
-                // No position specified, add to end
-                $maxSeq = TopicContent::where('topics_category_id', $categoryId)->max('seq') ?? 0;
-                $validated['seq'] = $maxSeq + 1;
-            } else {
-                // Position specified, use shift-based insertion
-                $newPosition = $validated['seq'];
+            // The form numbers positions 1..N from the rendered list, so seq
+            // has to actually be 1..N for that number to mean the same thing
+            // here. Existing rows can start at 2 or have gaps, which is what
+            // made "last" land second-to-last.
+            $total = $this->resequenceContents($categoryId);
 
-                // Get total count
-                $totalCount = TopicContent::where('topics_category_id', $categoryId)->count();
+            $position = $validated['seq'] ?? ($total + 1);
+            $position = max(1, min((int) $position, $total + 1));
 
-                // Validate and adjust position
-                if ($newPosition > $totalCount + 1) {
-                    $newPosition = $totalCount + 1;
-                    $validated['seq'] = $newPosition;
-                }
+            TopicContent::where('topics_category_id', $categoryId)
+                ->where('seq', '>=', $position)
+                ->increment('seq');
 
-                // Shift existing items to make room for new item
-                TopicContent::where('topics_category_id', $categoryId)
-                    ->where('seq', '>=', $newPosition)
-                    ->increment('seq');
-            }
+            $validated['seq'] = $position;
 
             TopicContent::create($validated);
         });
 
         return redirect()->back();
+    }
+
+    /**
+     * Renumber a category's contents to a gap-free 1..N in their current order.
+     *
+     * Position and seq are treated as the same number throughout ordering, so
+     * this keeps that true — and repairs rows that drifted apart previously.
+     *
+     * @return int the number of rows
+     */
+    private function resequenceContents($categoryId): int
+    {
+        $rows = TopicContent::where('topics_category_id', $categoryId)
+            ->orderBy('seq')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($rows as $index => $row) {
+            $expected = $index + 1;
+
+            if ((int) $row->seq !== $expected) {
+                $row->update(['seq' => $expected]);
+            }
+        }
+
+        return $rows->count();
     }
 
     public function updateContent(Request $request, $id)
@@ -446,18 +465,18 @@ class TopicController extends Controller
             'seq' => 'nullable|integer|min:1',
         ]);
 
-        if (isset($validated['seq']) && $validated['seq'] != $content->seq) {
-            $newPosition = $validated['seq'];
-            $oldPosition = $content->seq;
+        if (isset($validated['seq'])) {
+            $requested = (int) $validated['seq'];
 
-            DB::transaction(function () use ($content, $newPosition, $oldPosition, $id) {
-                // Get total count and validate new position
-                $totalCount = TopicContent::where('topics_category_id', $content->topics_category_id)->count();
+            DB::transaction(function () use ($content, $requested, $id) {
+                // Same reason as storeContent: the form's position only lines
+                // up with seq once seq is a gap-free 1..N.
+                $totalCount = $this->resequenceContents($content->topics_category_id);
 
-                if ($newPosition > $totalCount) {
-                    // If position exceeds total, move to last position
-                    $newPosition = $totalCount;
-                }
+                // Re-read: renumbering may have moved this row.
+                $content->refresh();
+                $oldPosition = (int) $content->seq;
+                $newPosition = max(1, min($requested, $totalCount));
 
                 // No-op if position unchanged
                 if ($newPosition === $oldPosition) {
@@ -524,9 +543,16 @@ class TopicController extends Controller
             ->orderBy('seq')
             ->get();
 
+        // Fetched in one go rather than per row — this used to issue a query
+        // for every content item on the page.
+        $subtitles = AudioSubtitle::with('audio')
+            ->whereIn('id', $contents->pluck('id_header')->filter()->all())
+            ->get()
+            ->keyBy('id');
+
         $items = [];
         foreach ($contents as $content) {
-            $subtitle = AudioSubtitle::with('audio')->find($content->id_header);
+            $subtitle = $subtitles->get($content->id_header);
             if ($subtitle) {
                 // Convert timestamp from seconds to HH:MM:SS format
                 $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
@@ -551,39 +577,58 @@ class TopicController extends Controller
             }
         }
 
-        // Get all available audio subtitle items for selection (no filtering)
-        $availableItems = AudioSubtitle::with('audio')
-            ->orderBy('audio_id')
-            ->orderBy('timestamp')
-            ->get()
-            ->map(function ($subtitle) {
-                // Convert timestamp from seconds to HH:MM:SS format
-                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
-                $hours = floor($totalSeconds / 3600);
-                $minutes = floor(($totalSeconds % 3600) / 60);
-                $seconds = $totalSeconds % 60;
-                $formattedTime = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
-
-                // Use subtitle title if available, otherwise use audio title
-                $displayTitle = $subtitle->title ?: ($subtitle->audio ? $subtitle->audio->title : 'Untitled');
-                $sourceTitle = $subtitle->audio ? $subtitle->audio->title : 'Unknown';
-
-                return [
-                    'id' => $subtitle->id,
-                    'type' => 'audio',
-                    'title' => $displayTitle,
-                    'timestamp' => $formattedTime,
-                    'description' => $subtitle->description ?? '',
-                    'source' => $sourceTitle,
-                    'audio_id' => $subtitle->audio_id,
-                ];
-            });
-
         return Inertia::render('Topic/Detail', [
             'category' => $category,
             'topicCategory' => $topicCategory,
             'items' => $items,
-            'availableItems' => $availableItems,
+            // Optional: left out of the initial load and only fetched when the
+            // picker asks for it. Sending every audio_subtitle row up front
+            // meant ~160 MB and a 5 MB payload on a table of ~18k rows, which
+            // exhausted PHP's memory limit before Laravel could render at all.
+            'availableItems' => Inertia::optional(fn () => $this->availableSubtitles($request)),
+            'availableFilters' => [
+                'search' => trim((string) $request->string('item_search')),
+            ],
         ]);
+    }
+
+    /**
+     * Searchable, paginated pool of audio subtitles for the item picker.
+     */
+    private function availableSubtitles(Request $request)
+    {
+        $search = trim((string) $request->string('item_search'));
+
+        return AudioSubtitle::query()
+            ->with('audio:id,title')
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($q) use ($search): void {
+                    $q->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhereHas('audio', fn ($a) => $a->where('title', 'like', "%{$search}%"));
+                });
+            })
+            ->orderBy('audio_id')
+            ->orderBy('timestamp')
+            ->paginate(20, ['id', 'audio_id', 'title', 'description', 'timestamp'], 'item_page')
+            ->withQueryString()
+            ->through(function (AudioSubtitle $subtitle): array {
+                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
+
+                return [
+                    'id' => $subtitle->id,
+                    'type' => 'audio',
+                    'title' => $subtitle->title ?: ($subtitle->audio->title ?? 'Untitled'),
+                    'timestamp' => sprintf(
+                        '%02d:%02d:%02d',
+                        floor($totalSeconds / 3600),
+                        floor(($totalSeconds % 3600) / 60),
+                        $totalSeconds % 60
+                    ),
+                    'description' => $subtitle->description ?? '',
+                    'source' => $subtitle->audio->title ?? 'Unknown',
+                    'audio_id' => $subtitle->audio_id,
+                ];
+            });
     }
 }
