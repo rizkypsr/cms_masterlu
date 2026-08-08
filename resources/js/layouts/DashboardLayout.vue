@@ -110,6 +110,7 @@ const navItems = [
             { label: 'Menu', href: '/menu-mobile' },
             { label: 'Notif Schedule', href: '#' },
             { label: 'Data Migration', href: '/admin/data-migration' },
+            { label: 'Akses Admin', href: '/settings/admin-akses' },
             { label: 'Backup Database', href: '/settings/database-backup' },
         ],
     },

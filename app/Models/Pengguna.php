@@ -30,6 +30,7 @@ class Pengguna extends Model
         'plan_started_at',
         'plan_expires_at',
         'deposit_balance_mrp',
+        'is_admin',
     ];
 
     protected $hidden = [

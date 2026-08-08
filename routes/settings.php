@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DepositController;
+use App\Http\Controllers\Settings\AdminAccessController;
 use App\Http\Controllers\Settings\DatabaseBackupController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -32,6 +33,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/database-backup/download', [DatabaseBackupController::class, 'download'])
         ->middleware('throttle:6,1')
         ->name('database-backup.download');
+
+    // Who holds pengguna.is_admin, the flag the chat/deposit API checks
+    Route::get('settings/admin-akses', [AdminAccessController::class, 'index'])->name('admin-akses.index');
+    Route::post('settings/admin-akses/{pengguna}/toggle', [AdminAccessController::class, 'toggle'])->name('admin-akses.toggle');
 
     // Saldo Deposit — topup queue, balances, AI rates, monthly report
     Route::get('deposit', [DepositController::class, 'topups'])->name('deposit.topups');
