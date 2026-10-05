@@ -81,7 +81,7 @@ const filteredContents = computed(() => {
 
 // Modal states
 const modalOpen = ref(false);
-const modalType = ref<'add' | 'edit' | 'delete' | 'bulk-category'>('add');
+const modalType = ref<'add' | 'edit' | 'delete' | 'bulk-category' | 'bulk-add'>('add');
 const modalTitle = ref('');
 const selectedContent = ref<Topic3Content | null>(null);
 
@@ -165,6 +165,37 @@ const handleBulkCategoryAssignment = () => {
             modalOpen.value = false;
             selectedContentIds.value = [];
             bulkCategoryForm.reset();
+        },
+    });
+};
+
+// Bulk add (many contents from one numbered text block)
+const bulkAddForm = useForm({
+    text: '',
+    category_id: null as number | null,
+    new_category_name: '',
+});
+const showBulkAddNewCategoryInput = ref(false);
+
+// Mirrors Topic3Controller::splitNumberedText — a block starts at a line that is only "N."
+const bulkAddCount = computed(() =>
+    bulkAddForm.text.split(/\r\n|\r|\n/).filter(line => /^\s*\d+\.\s*$/.test(line)).length,
+);
+
+const openBulkAddModal = () => {
+    modalType.value = 'bulk-add';
+    modalTitle.value = 'Tambah Banyak Konten';
+    bulkAddForm.reset();
+    bulkAddForm.clearErrors();
+    showBulkAddNewCategoryInput.value = false;
+    modalOpen.value = true;
+};
+
+const handleBulkAdd = () => {
+    bulkAddForm.post(`/topic3/chapter/${props.chapter.id}/content/bulk`, {
+        onSuccess: () => {
+            modalOpen.value = false;
+            bulkAddForm.reset();
         },
     });
 };
@@ -277,6 +308,14 @@ const goBack = () => {
                         >
                             <Icon icon="mdi:delete" class="mr-1 h-4 w-4" />
                             Hapus ({{ selectedContentIds.length }})
+                        </Button>
+                        <Button 
+                            @click="openBulkAddModal"
+                            class="bg-[#337ab7] hover:bg-[#286090]"
+                            size="sm"
+                        >
+                            <Icon icon="mdi:playlist-plus" class="mr-1 h-4 w-4" />
+                            Tambah Banyak
                         </Button>
                         <Button 
                             @click="openModal('add')"
@@ -458,6 +497,67 @@ const goBack = () => {
                             </Button>
                         </div>
                     </div>
+
+                    <!-- Bulk Add Modal -->
+                    <form v-else-if="modalType === 'bulk-add'" @submit.prevent="handleBulkAdd" class="space-y-4">
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700">Kategori</label>
+                            <div class="space-y-2">
+                                <select 
+                                    v-model="bulkAddForm.category_id" 
+                                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    :disabled="showBulkAddNewCategoryInput"
+                                >
+                                    <option :value="null">Pilih kategori (opsional)</option>
+                                    <option v-for="cat in contentCategories" :key="cat.id" :value="cat.id">
+                                        {{ cat.name }}
+                                    </option>
+                                </select>
+                                
+                                <div class="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        v-model="showBulkAddNewCategoryInput" 
+                                        id="bulkAddNewCategory"
+                                        class="h-4 w-4 rounded border-gray-300"
+                                    />
+                                    <label for="bulkAddNewCategory" class="text-sm text-gray-600">Buat kategori baru</label>
+                                </div>
+
+                                <Input 
+                                    v-if="showBulkAddNewCategoryInput"
+                                    v-model="bulkAddForm.new_category_name" 
+                                    placeholder="Nama kategori baru"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700">Konten</label>
+                            <p class="mb-2 text-xs text-gray-500">
+                                Tulis nomor di baris sendiri (<code>1.</code>, <code>2.</code>, ...). Setiap nomor jadi satu data terpisah, halaman diisi otomatis berurutan.
+                            </p>
+                            <textarea
+                                v-model="bulkAddForm.text"
+                                rows="14"
+                                class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                :placeholder="'1.\nTanya: ...\n\nMaster: ...\n\n2.\nTanya: ...'"
+                            ></textarea>
+                            <p v-if="bulkAddForm.errors.text" class="mt-1 text-sm text-red-500">{{ bulkAddForm.errors.text }}</p>
+                            <p class="mt-1 text-sm text-gray-600">Terdeteksi <strong>{{ bulkAddCount }}</strong> data</p>
+                        </div>
+
+                        <div class="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
+                            <Button 
+                                type="submit" 
+                                class="bg-[#5cb85c] hover:bg-[#4cae4c]"
+                                :disabled="bulkAddForm.processing || bulkAddCount === 0"
+                            >
+                                Simpan {{ bulkAddCount }} Data
+                            </Button>
+                        </div>
+                    </form>
 
                     <!-- Bulk Category Assignment Modal -->
                     <div v-else-if="modalType === 'bulk-category'" class="space-y-4">

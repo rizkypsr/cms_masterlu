@@ -552,6 +552,95 @@ class Topic3Controller extends Controller
         return back();
     }
 
+    /**
+     * Store many contents at once from a single text block split on numbered lines ("1.", "2.", ...).
+     */
+    public function bulkStoreContent(Request $request, Topic3Chapter $chapter)
+    {
+        $request->validate([
+            'text' => 'required|string',
+            'category_id' => 'nullable|exists:topics3_content_category,id',
+            'new_category_name' => 'nullable|string|max:255',
+        ]);
+
+        $items = self::splitNumberedText($request->text);
+
+        if ($items === []) {
+            return back()->withErrors(['text' => 'Tidak ada data bernomor yang ditemukan (contoh: "1." di baris sendiri).']);
+        }
+
+        $categoryId = $request->category_id;
+
+        if ($request->new_category_name) {
+            $maxSeq = Topic3ContentCategory::max('seq') ?? 0;
+            $categoryId = Topic3ContentCategory::create([
+                'name' => $request->new_category_name,
+                'seq' => $maxSeq + 1,
+            ])->id;
+        }
+
+        $page = (Topic3Content::where('topics3_chapters_id', $chapter->id)->max('page') ?? 0) + 1;
+
+        DB::transaction(function () use ($items, $chapter, $categoryId, &$page) {
+            foreach ($items as $item) {
+                Topic3Content::create([
+                    'topics3_chapters_id' => $chapter->id,
+                    'category_id' => $categoryId,
+                    'page' => $page++,
+                    'content' => self::plainTextToHtml($item),
+                ]);
+            }
+        });
+
+        return back();
+    }
+
+    /**
+     * Split text into blocks, each starting at a line that is only a number followed by a dot.
+     * The number line is kept as part of its block. Text before the first number is ignored.
+     *
+     * @return list<string>
+     */
+    public static function splitNumberedText(string $text): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $text);
+        $blocks = [];
+        $current = null;
+
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*\d+\.\s*$/u', $line)) {
+                if ($current !== null) {
+                    $blocks[] = $current;
+                }
+                $current = [trim($line)];
+            } elseif ($current !== null) {
+                $current[] = rtrim($line);
+            }
+        }
+
+        if ($current !== null) {
+            $blocks[] = $current;
+        }
+
+        return array_map(fn (array $block) => trim(implode("\n", $block)), $blocks);
+    }
+
+    /**
+     * Convert plain text into editor HTML: one paragraph per non-empty line.
+     */
+    public static function plainTextToHtml(string $text): string
+    {
+        $lines = array_filter(
+            array_map('trim', explode("\n", $text)),
+            fn (string $line) => $line !== ''
+        );
+
+        return implode('', array_map(
+            fn (string $line) => '<p>'.e($line).'</p>',
+            $lines
+        ));
+    }
+
     public function updateContent(Request $request, Topic3Content $content)
     {
         $request->validate([

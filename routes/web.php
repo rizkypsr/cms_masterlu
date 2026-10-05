@@ -173,6 +173,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Topic3 Content Page
     Route::get('topic3/chapter/{chapter}/content', [App\Http\Controllers\Topic3Controller::class, 'showContent'])->name('topic3.content.show');
     Route::post('topic3/chapter/{chapter}/content', [App\Http\Controllers\Topic3Controller::class, 'storeContent'])->name('topic3.content.store');
+    Route::post('topic3/chapter/{chapter}/content/bulk', [App\Http\Controllers\Topic3Controller::class, 'bulkStoreContent'])->name('topic3.content.bulk-store');
     Route::put('topic3/content/{content}', [App\Http\Controllers\Topic3Controller::class, 'updateContent'])->name('topic3.content.update');
     Route::delete('topic3/content/{content}', [App\Http\Controllers\Topic3Controller::class, 'destroyContent'])->name('topic3.content.destroy');
     Route::post('topic3/content/bulk-delete', [App\Http\Controllers\Topic3Controller::class, 'bulkDeleteContent'])->name('topic3.content.bulk-delete');
