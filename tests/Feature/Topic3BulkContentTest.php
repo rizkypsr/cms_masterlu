@@ -61,6 +61,11 @@ it('splits numbered text into blocks keeping the number line', function () use (
         ->and($blocks[2])->toBe("3.\nTanya: Apa yang seharusnya mereka lakukan?");
 });
 
+it('keeps every blank line as typed', function () {
+    expect(Topic3Controller::plainTextToHtml("2.\n\nTanya: a\n\n\nMaster: b"))
+        ->toBe('<p>2.<br><br>Tanya: a<br><br><br>Master: b</p>');
+});
+
 it('does not split on numbered lines that carry text', function () {
     $blocks = Topic3Controller::splitNumberedText("1.\nMaster: dua hal:\n1. jangan menanam sebab\n2. jangan ada akibat");
 
@@ -78,7 +83,7 @@ it('stores each numbered block as a separate content with sequential pages', fun
 
     expect($contents)->toHaveCount(4)
         ->and($contents->pluck('page')->all())->toBe([5, 6, 7, 8])
-        ->and($contents[1]->content)->toBe('<p>1.</p><p>Tanya: Saat aku membaca sutra, aku tertidur.</p><p>Master: Samsara adalah sebab-akibat.</p>')
+        ->and($contents[1]->content)->toBe('<p>1.<br>Tanya: Saat aku membaca sutra, aku tertidur.<br><br>Master: Samsara adalah sebab-akibat.</p>')
         ->and($contents[2]->content)->toContain('&quot;Shanyou&quot;');
 });
 

@@ -626,19 +626,14 @@ class Topic3Controller extends Controller
     }
 
     /**
-     * Convert plain text into editor HTML: one paragraph per non-empty line.
+     * Convert plain text into editor HTML as one paragraph with a <br> per line break,
+     * so blank lines between "Tanya" and "Master" are kept exactly as typed.
      */
     public static function plainTextToHtml(string $text): string
     {
-        $lines = array_filter(
-            array_map('trim', explode("\n", $text)),
-            fn (string $line) => $line !== ''
-        );
+        $lines = array_map(fn (string $line) => e(rtrim($line)), explode("\n", $text));
 
-        return implode('', array_map(
-            fn (string $line) => '<p>'.e($line).'</p>',
-            $lines
-        ));
+        return '<p>'.implode('<br>', $lines).'</p>';
     }
 
     public function updateContent(Request $request, Topic3Content $content)
