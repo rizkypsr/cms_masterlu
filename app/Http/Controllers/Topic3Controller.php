@@ -596,7 +596,10 @@ class Topic3Controller extends Controller
     }
 
     /**
-     * Split text into blocks, each starting at a line that is only a number followed by a dot.
+     * Split text into numbered blocks. A block starts at either:
+     * - a line that is only "N." (always), or
+     * - a line "N. text" when N is the next number in sequence and the line above is blank,
+     *   so numbered lists inside an answer are not split.
      * The number line is kept as part of its block. Text before the first number is ignored.
      *
      * @return list<string>
@@ -606,16 +609,30 @@ class Topic3Controller extends Controller
         $lines = preg_split('/\r\n|\r|\n/', $text);
         $blocks = [];
         $current = null;
+        $lastNumber = null;
+        $previousBlank = true;
 
         foreach ($lines as $line) {
-            if (preg_match('/^\s*\d+\.\s*$/u', $line)) {
+            $startsBlock = false;
+
+            if (preg_match('/^\s*(\d+)\.\s*$/u', $line, $match)) {
+                $startsBlock = true;
+            } elseif (preg_match('/^\s*(\d+)\.\s+\S/u', $line, $match)) {
+                $startsBlock = $previousBlank
+                    && ($lastNumber === null || (int) $match[1] === $lastNumber + 1);
+            }
+
+            if ($startsBlock) {
                 if ($current !== null) {
                     $blocks[] = $current;
                 }
                 $current = [trim($line)];
+                $lastNumber = (int) $match[1];
             } elseif ($current !== null) {
                 $current[] = rtrim($line);
             }
+
+            $previousBlank = trim($line) === '';
         }
 
         if ($current !== null) {

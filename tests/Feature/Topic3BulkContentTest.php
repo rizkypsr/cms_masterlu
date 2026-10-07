@@ -61,6 +61,26 @@ it('splits numbered text into blocks keeping the number line', function () use (
         ->and($blocks[2])->toBe("3.\nTanya: Apa yang seharusnya mereka lakukan?");
 });
 
+it('splits on numbers written on the same line as the text', function () {
+    $blocks = Topic3Controller::splitNumberedText("1. Judul satu\n\nTanya: a\n\nMaster: b\n\n2. Judul dua \n\nTanya: c\n\nMaster: d");
+
+    expect($blocks)->toBe([
+        "1. Judul satu\n\nTanya: a\n\nMaster: b",
+        "2. Judul dua\n\nTanya: c\n\nMaster: d",
+    ]);
+});
+
+it('mixes number-only lines and inline numbers', function () {
+    expect(Topic3Controller::splitNumberedText("1. teks\n\n\n2.\nteks"))->toBe(['1. teks', "2.\nteks"]);
+});
+
+it('does not split on inline numbered lists inside an answer', function () {
+    $blocks = Topic3Controller::splitNumberedText("1. Judul\n\nMaster: dua hal:\n\n1. jangan menanam sebab\n3. lain\n\n2. Judul dua");
+
+    expect($blocks)->toHaveCount(2)
+        ->and($blocks[0])->toContain('1. jangan menanam sebab');
+});
+
 it('keeps every blank line as typed', function () {
     expect(Topic3Controller::plainTextToHtml("2.\n\nTanya: a\n\n\nMaster: b"))
         ->toBe('<p>2.<br><br>Tanya: a<br><br><br>Master: b</p>');

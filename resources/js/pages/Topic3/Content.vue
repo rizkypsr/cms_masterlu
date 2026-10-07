@@ -177,10 +177,28 @@ const bulkAddForm = useForm({
 });
 const showBulkAddNewCategoryInput = ref(false);
 
-// Mirrors Topic3Controller::splitNumberedText — a block starts at a line that is only "N."
-const bulkAddCount = computed(() =>
-    bulkAddForm.text.split(/\r\n|\r|\n/).filter(line => /^\s*\d+\.\s*$/.test(line)).length,
-);
+// Mirrors Topic3Controller::splitNumberedText: a block starts at a line that is only "N.",
+// or at "N. text" when N is the next number and the line above is blank.
+const bulkAddCount = computed(() => {
+    let count = 0;
+    let lastNumber: number | null = null;
+    let previousBlank = true;
+
+    for (const line of bulkAddForm.text.split(/\r\n|\r|\n/)) {
+        const alone = line.match(/^\s*(\d+)\.\s*$/);
+        const inline = alone ? null : line.match(/^\s*(\d+)\.\s+\S/);
+        const number = Number((alone ?? inline)?.[1]);
+
+        if (alone || (inline && previousBlank && (lastNumber === null || number === lastNumber + 1))) {
+            count++;
+            lastNumber = number;
+        }
+
+        previousBlank = line.trim() === '';
+    }
+
+    return count;
+});
 
 const openBulkAddModal = () => {
     modalType.value = 'bulk-add';
@@ -535,7 +553,7 @@ const goBack = () => {
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">Konten</label>
                             <p class="mb-2 text-xs text-gray-500">
-                                Tulis nomor di baris sendiri (<code>1.</code>, <code>2.</code>, ...). Setiap nomor jadi satu data terpisah, halaman diisi otomatis berurutan.
+                                Awali setiap data dengan nomor: di baris sendiri (<code>1.</code>) atau sebaris dengan teks (<code>1. Judul</code>). Nomor sebaris harus berurutan dan diawali baris kosong. Setiap nomor jadi satu data terpisah, halaman diisi otomatis berurutan.
                             </p>
                             <textarea
                                 v-model="bulkAddForm.text"
