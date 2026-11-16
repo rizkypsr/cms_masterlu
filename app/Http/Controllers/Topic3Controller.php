@@ -717,7 +717,7 @@ class Topic3Controller extends Controller
     {
         $request->validate([
             'content_ids' => 'required|array',
-            'content_ids.*' => 'exists:topics3_content,id',
+            'content_ids.*' => 'exists:topics3_contents,id',
         ]);
 
         Topic3Content::whereIn('id', $request->content_ids)->delete();

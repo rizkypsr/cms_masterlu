@@ -123,3 +123,15 @@ it('rejects text without numbered lines', function () {
 
     expect(Topic3Content::count())->toBe(0);
 });
+
+it('bulk deletes the selected contents', function () {
+    $keep = Topic3Content::create(['topics3_chapters_id' => $this->chapter->id, 'content' => '<p>a</p>', 'page' => 1]);
+    $first = Topic3Content::create(['topics3_chapters_id' => $this->chapter->id, 'content' => '<p>b</p>', 'page' => 2]);
+    $second = Topic3Content::create(['topics3_chapters_id' => $this->chapter->id, 'content' => '<p>c</p>', 'page' => 3]);
+
+    $this->post('/topic3/content/bulk-delete', ['content_ids' => [$first->id, $second->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(Topic3Content::pluck('id')->all())->toBe([$keep->id]);
+});
