@@ -90,6 +90,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('audio/subtitle/item/{subtitle}', [AudioCategoryController::class, 'destroySubtitle'])->name('audio.subtitle.destroy');
     Route::delete('audio/subtitle/{audio}/all', [AudioCategoryController::class, 'destroyAllSubtitles'])->name('audio.subtitle.destroy-all');
 
+    // Audio 2 (full transcript per episode)
+    Route::get('audio2', [App\Http\Controllers\Audio2Controller::class, 'index'])->name('audio2.index');
+    Route::post('audio2/category', [App\Http\Controllers\Audio2Controller::class, 'storeCategory'])->name('audio2.category.store');
+    Route::post('audio2/category/reorder', [App\Http\Controllers\Audio2Controller::class, 'reorderCategories'])->name('audio2.category.reorder');
+    Route::put('audio2/category/{category}', [App\Http\Controllers\Audio2Controller::class, 'updateCategory'])->name('audio2.category.update');
+    Route::delete('audio2/category/{category}', [App\Http\Controllers\Audio2Controller::class, 'destroyCategory'])->name('audio2.category.destroy');
+    Route::post('audio2/episode', [App\Http\Controllers\Audio2Controller::class, 'storeEpisode'])->name('audio2.episode.store');
+    Route::put('audio2/episode/{audio2}', [App\Http\Controllers\Audio2Controller::class, 'updateEpisode'])->name('audio2.episode.update');
+    Route::delete('audio2/episode/{audio2}', [App\Http\Controllers\Audio2Controller::class, 'destroyEpisode'])->name('audio2.episode.destroy');
+    Route::get('audio2/episode/{audio2}/transcript', [App\Http\Controllers\Audio2Controller::class, 'transcript'])->name('audio2.transcript.show');
+    Route::post('audio2/transcript/preview', [App\Http\Controllers\Audio2Controller::class, 'previewTranscript'])->name('audio2.transcript.preview');
+    Route::post('audio2/episode/{audio2}/transcript', [App\Http\Controllers\Audio2Controller::class, 'storeTranscript'])->name('audio2.transcript.store');
+    Route::post('audio2/episode/{audio2}/segment', [App\Http\Controllers\Audio2Controller::class, 'storeSegment'])->name('audio2.segment.store');
+    Route::post('audio2/episode/{audio2}/segment/reorder', [App\Http\Controllers\Audio2Controller::class, 'reorderSegments'])->name('audio2.segment.reorder');
+    Route::delete('audio2/episode/{audio2}/segment', [App\Http\Controllers\Audio2Controller::class, 'destroyAllSegments'])->name('audio2.segment.destroy-all');
+    Route::post('audio2/segment/bulk-delete', [App\Http\Controllers\Audio2Controller::class, 'bulkDeleteSegments'])->name('audio2.segment.bulk-delete');
+    Route::put('audio2/segment/{segment}', [App\Http\Controllers\Audio2Controller::class, 'updateSegment'])->name('audio2.segment.update');
+    Route::delete('audio2/segment/{segment}', [App\Http\Controllers\Audio2Controller::class, 'destroySegment'])->name('audio2.segment.destroy');
+
     // Topic Routes (without lang parameter)
     Route::get('topic', [TopicController::class, 'index'])->name('topic.index');
     Route::post('topic', [TopicController::class, 'store'])->name('topic.store');

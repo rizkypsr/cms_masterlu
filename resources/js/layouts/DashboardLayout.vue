@@ -49,6 +49,7 @@ const navItems = [
             { label: 'Topik', href: '/audio/topik' },
         ],
     },
+    { label: 'Audio 2', href: '/audio2' },
     { label: 'Buku', href: '/book' },
     {
         label: 'Topik',
