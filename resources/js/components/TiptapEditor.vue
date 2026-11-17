@@ -124,6 +124,13 @@ const setTextColor = (color: string) => {
 const setHighlight = (color: string) => {
     editor.value?.chain().focus().setHighlight({ color }).run();
 };
+
+/** The editable text is only as tall as its content; clicking the empty area below it should still start typing. */
+const focusFromEmptyArea = (event: MouseEvent) => {
+    if (!(event.target as HTMLElement).closest('.ProseMirror')) {
+        editor.value?.commands.focus('end');
+    }
+};
 </script>
 
 <template>
@@ -207,7 +214,7 @@ const setHighlight = (color: string) => {
         </div>
         
         <!-- Editor Content -->
-        <div v-if="!showCodeView" class="bg-white overflow-y-auto" :style="{ height: height || '200px' }">
+        <div v-if="!showCodeView" class="cursor-text bg-white overflow-y-auto" :style="{ height: height || '200px' }" @click="focusFromEmptyArea">
             <EditorContent :editor="editor" />
         </div>
         
