@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('public_bookmarks', function (Blueprint $table) {
+            $table->dropIndex(['bookmark_id']);
             $table->dropColumn('bookmark_id');
             $table->string('title');
             $table->integer('pengguna_id')->nullable();

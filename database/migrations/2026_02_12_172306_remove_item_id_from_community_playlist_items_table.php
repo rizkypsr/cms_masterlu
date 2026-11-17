@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('community_playlist_items', function (Blueprint $table) {
+            $table->dropIndex(['type', 'item_id']);
             $table->dropColumn('item_id');
         });
     }

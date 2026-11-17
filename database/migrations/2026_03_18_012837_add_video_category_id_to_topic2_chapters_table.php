@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (! Schema::hasTable('topics2_chapters')) {
+            return;
+        }
+
         Schema::table('topics2_chapters', function (Blueprint $table) {
             $table->unsignedInteger('video_category_id')->nullable()->after('have_child');
         });
@@ -21,6 +25,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasTable('topics2_chapters')) {
+            return;
+        }
+
         Schema::table('topics2_chapters', function (Blueprint $table) {
             $table->dropColumn('video_category_id');
         });
