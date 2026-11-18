@@ -449,14 +449,40 @@ const backHref = computed(() => `/audio2?category=${props.episode.audio2_categor
                 :class="modalType === 'full' ? 'sm:max-w-6xl' : modalType === 'add' || modalType === 'edit' ? 'sm:max-w-2xl' : 'sm:max-w-md'"
             >
                 <DialogHeader class="px-6 pt-6 pb-0">
-                    <DialogTitle>{{ modalTitle }}</DialogTitle>
+                    <div class="flex flex-wrap items-center justify-between gap-3 pr-8">
+                        <DialogTitle>{{ modalTitle }}</DialogTitle>
+                        <!-- Full input: actions sit up top so they stay next to the text, not below a long paste -->
+                        <div v-if="modalType === 'full'" class="flex items-center gap-2">
+                            <Button type="button" variant="outline" size="sm" @click="modalOpen = false">Batal</Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                @click="saveFull"
+                                :disabled="!preview || preview.length === 0 || fullForm.processing"
+                                class="bg-[#5cb85c] hover:bg-[#4cae4c]"
+                            >
+                                Simpan {{ preview?.length ?? 0 }} Segmen
+                            </Button>
+                        </div>
+                    </div>
                 </DialogHeader>
 
                 <div class="flex-1 overflow-y-auto px-6 py-4">
                     <!-- Full text -->
                     <div v-if="modalType === 'full'" class="grid gap-4 lg:grid-cols-5">
                         <div class="flex flex-col gap-2 lg:col-span-2">
-                            <label class="text-sm font-medium text-gray-700">1. Tempel teks full</label>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-sm font-medium text-gray-700">1. Tempel teks full</label>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    @click="runPreview"
+                                    :disabled="!fullForm.text.trim() || previewLoading"
+                                    class="bg-[#337ab7] hover:bg-[#286090]"
+                                >
+                                    {{ previewLoading ? 'Memproses...' : 'Pratinjau' }}
+                                </Button>
+                            </div>
                             <p class="text-xs text-gray-500">
                                 Format: baris kode + waktu (contoh <code>{{ episode.title }} 01:09</code>), baris [judul], lalu isi. Baris
                                 <code>Penelepon N.</code> memulai kelompok penelepon. Segmen ditambahkan di akhir daftar; tanpa baris penelepon, segmen ikut kelompok terakhir.
@@ -468,9 +494,6 @@ const backHref = computed(() => `/audio2?category=${props.episode.audio2_categor
                                 :placeholder="`${episode.title} 00:00\n[Kata pembuka]\n\nMaster: ...\n\nPenelepon 1.\n\n${episode.title} 01:09\n[Judul]\n\nPenelepon: ...`"
                             ></textarea>
                             <p v-if="fullForm.errors.text" class="text-sm text-red-500">{{ fullForm.errors.text }}</p>
-                            <Button type="button" @click="runPreview" :disabled="!fullForm.text.trim() || previewLoading" class="bg-[#337ab7] hover:bg-[#286090]">
-                                {{ previewLoading ? 'Memproses...' : 'Pratinjau' }}
-                            </Button>
                         </div>
                         <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">
                             <div class="flex items-center gap-2">
@@ -550,19 +573,10 @@ const backHref = computed(() => `/audio2?category=${props.episode.audio2_categor
                     </p>
                 </div>
 
-                <div class="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+                <div v-if="modalType !== 'full'" class="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
                     <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
                     <Button
-                        v-if="modalType === 'full'"
-                        type="button"
-                        @click="saveFull"
-                        :disabled="!preview || preview.length === 0 || fullForm.processing"
-                        class="bg-[#5cb85c] hover:bg-[#4cae4c]"
-                    >
-                        Simpan {{ preview?.length ?? 0 }} Segmen
-                    </Button>
-                    <Button
-                        v-else-if="modalType === 'add' || modalType === 'edit'"
+                        v-if="modalType === 'add' || modalType === 'edit'"
                         type="button"
                         @click="saveSegment"
                         :disabled="segmentForm.processing"
