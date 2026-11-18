@@ -28,7 +28,7 @@ interface TopicCategory {
 
 interface TopicContentItem {
     id: number;
-    type: 'audio' | 'video';
+    type: 'audio' | 'audio2' | 'video';
     title: string;
     waktu: string;
     timestamp: string;
@@ -39,7 +39,7 @@ interface TopicContentItem {
 
 interface AvailableItem {
     id: number;
-    type: 'audio' | 'video';
+    type: 'audio2';
     title: string;
     timestamp: string;
     description: string;
@@ -66,7 +66,8 @@ const props = defineProps<{
     items: TopicContentItem[];
     // Optional Inertia prop: absent until the picker asks for it.
     availableItems?: PaginatedAvailable;
-    availableFilters: { search: string };
+    availableFilters: { search: string; category: number | null };
+    audio2Categories: { id: number; title: string }[];
 }>();
 
 const page = usePage();
@@ -79,13 +80,21 @@ const searchQuery = ref('');
 // The picker is searched and paged on the server: the pool is ~18k rows, and
 // shipping it whole exhausted PHP's memory before the page could render.
 const modalSearchQuery = ref('');
+const modalCategory = ref<number | ''>('');
 const availableLoading = ref(false);
 
 const loadAvailable = (page = 1) => {
     availableLoading.value = true;
     router.reload({
         only: ['availableItems'],
-        data: { item_search: modalSearchQuery.value || undefined, item_page: page },
+        data: { item_search: modalSearchQuery.value || undefined, item_category: modalCategory.value || undefined, item_page: page },
+        onSuccess: () => {
+            // A pasted "code mm:ss" that finds exactly one segment is picked right away.
+            const found = props.availableItems?.data ?? [];
+            if (/^\S+\s+\d{1,2}:\d{2}(:\d{2})?$/.test(modalSearchQuery.value.trim()) && found.length === 1) {
+                selectAvailableItem(found[0]);
+            }
+        },
         onFinish: () => (availableLoading.value = false),
     });
 };
@@ -180,9 +189,11 @@ const handleBulkDelete = () => {
     }
 };
 
-// Navigate to audio subtitle source
+// Navigate to the linked source: an Audio 2 transcript or an Audio 1 subtitle list
 const navigateToSource = (item: TopicContentItem) => {
-    if (item.content && item.content.audio_id) {
+    if (item.type === 'audio2' && item.content?.audio2_id) {
+        window.open(`/audio2/episode/${item.content.audio2_id}/transcript`, '_blank');
+    } else if (item.content && item.content.audio_id) {
         const url = `/audio/subtitle/${item.content.audio_id}`;
         window.open(url, '_blank');
     }
@@ -229,6 +240,7 @@ const openModal = (type: typeof modalType.value, item?: TopicContentItem) => {
     selectedItem.value = item || null;
     selectedAvailableItem.value = null;
     modalSearchQuery.value = '';
+    modalCategory.value = '';
 
     switch (type) {
         case 'add':
@@ -385,7 +397,14 @@ const handleDelete = () => {
                                 </td>
                                 <td class="px-4 py-2 text-sm text-gray-600">{{ item.title }}</td>
                                 <td class="px-4 py-2 text-sm text-gray-600">{{ item.timestamp }}</td>
-                                <td class="px-4 py-2 text-sm text-gray-600">{{ item.source }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">
+                                    <span
+                                        :class="[
+                                            'mr-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap',
+                                            item.type === 'audio2' ? 'bg-[#337ab7]/10 text-[#337ab7]' : 'bg-gray-100 text-gray-500',
+                                        ]"
+                                    >{{ item.type === 'audio2' ? 'Audio 2' : 'Audio 1' }}</span>{{ item.source }}
+                                </td>
                             </tr>
                             <tr v-if="filteredItems.length === 0">
                                 <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">
@@ -416,27 +435,39 @@ const handleDelete = () => {
                     <!-- Add Form with Table -->
                     <form v-if="modalType === 'add'" @submit.prevent="handleSubmit" class="space-y-4">
                         <!-- Controls -->
-                        <div class="flex items-center justify-between">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <span class="text-sm text-gray-600">
                                 <span v-if="availableLoading">Memuat...</span>
-                                <span v-else>{{ availableTotal }} item tersedia</span>
+                                <span v-else>{{ availableTotal }} segmen Audio 2</span>
                             </span>
-                            <Input
-                                v-model="modalSearchQuery"
-                                placeholder="Cari judul / deskripsi / audio..."
-                                class="h-8 w-64"
-                                @input="onModalSearch"
-                            />
+                            <div class="flex min-w-0 items-center gap-2">
+                                <select
+                                    v-model="modalCategory"
+                                    class="h-8 shrink-0 rounded border border-gray-300 px-2 text-sm"
+                                    aria-label="Kategori Audio 2"
+                                    @change="loadAvailable(1)"
+                                >
+                                    <option value="">Semua kategori</option>
+                                    <option v-for="c in audio2Categories" :key="c.id" :value="c.id">{{ c.title }}</option>
+                                </select>
+                                <Input
+                                    v-model="modalSearchQuery"
+                                    placeholder="Cari judul, episode, atau kode + waktu"
+                                    class="h-8 w-full min-w-0 sm:w-72"
+                                    @input="onModalSearch"
+                                />
+                            </div>
                         </div>
+                        <p class="-mt-2 text-xs text-gray-500">Item baru diambil dari segmen Audio 2. Tempel kode + waktu untuk langsung ke segmennya.</p>
 
                         <!-- Table -->
                         <div class="max-h-[45vh] overflow-auto rounded border">
                             <table class="w-full">
                                 <thead class="sticky top-0 bg-gray-50">
                                     <tr class="border-b border-gray-200">
-                                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Title</th>
-                                        <th class="w-32 px-4 py-2 text-left text-sm font-medium text-gray-600">Timestamp</th>
-                                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Source</th>
+                                        <th class="px-3 py-2 text-left text-sm font-medium text-gray-600 sm:px-4">Title</th>
+                                        <th class="w-24 px-3 py-2 text-left text-sm font-medium text-gray-600 sm:w-32 sm:px-4">Timestamp</th>
+                                        <th class="hidden px-4 py-2 text-left text-sm font-medium text-gray-600 sm:table-cell">Source</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -449,9 +480,12 @@ const handleDelete = () => {
                                             selectedAvailableItem?.id === item.id && selectedAvailableItem?.type === item.type ? 'bg-blue-50' : ''
                                         ]"
                                     >
-                                        <td class="px-4 py-2 text-sm text-gray-600">{{ item.title }}</td>
-                                        <td class="px-4 py-2 text-sm text-gray-600">{{ item.timestamp }}</td>
-                                        <td class="px-4 py-2 text-sm text-gray-600">{{ item.source }}</td>
+                                        <td class="px-3 py-2 text-sm text-gray-600 sm:px-4">
+                                            {{ item.title }}
+                                            <span class="mt-0.5 block text-xs text-gray-400 sm:hidden">{{ item.source }}</span>
+                                        </td>
+                                        <td class="px-3 py-2 text-sm text-gray-600 tabular-nums sm:px-4">{{ item.timestamp }}</td>
+                                        <td class="hidden px-4 py-2 text-sm text-gray-600 sm:table-cell">{{ item.source }}</td>
                                     </tr>
                                     <tr v-if="paginatedAvailableItems.length === 0">
                                         <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">
@@ -463,11 +497,11 @@ const handleDelete = () => {
                         </div>
 
                         <!-- Pagination -->
-                        <div class="flex items-center justify-between border-t pt-2">
+                        <div class="flex flex-col gap-2 border-t pt-2 sm:flex-row sm:items-center sm:justify-between">
                             <div class="text-sm text-gray-600">
                                 Showing {{ modalShowingFrom }} to {{ modalShowingTo }} of {{ availableTotal }} entries
                             </div>
-                            <div class="flex items-center gap-1">
+                            <div class="flex flex-wrap items-center gap-1">
                                 <button
                                     type="button"
                                     @click="goToModalPage(modalCurrentPage - 1)"
@@ -519,7 +553,8 @@ const handleDelete = () => {
                             </select>
                         </div>
 
-                        <div class="flex justify-end gap-2 pt-2">
+                        <!-- Kept in view while the list above scrolls -->
+                        <div class="sticky -bottom-6 -mx-6 flex justify-end gap-2 border-t border-gray-200 bg-white px-6 py-3">
                             <Button type="button" variant="outline" @click="modalOpen = false">Batal</Button>
                             <Button 
                                 type="submit" 

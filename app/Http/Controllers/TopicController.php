@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Audio2Category;
+use App\Models\Audio2Segment;
 use App\Models\AudioSubtitle;
 use App\Models\Category;
 use App\Models\Topic;
@@ -401,12 +403,13 @@ class TopicController extends Controller
     public function storeContent(Request $request, $categoryId)
     {
         $validated = $request->validate([
-            'id_header' => 'required|integer',
+            'id_header' => 'required|integer|exists:audio2_segment,id',
             'seq' => 'nullable|integer|min:1',
         ]);
 
         $validated['topics_category_id'] = $categoryId;
-        $validated['type'] = 'audio'; // Always audio
+        // New links point at Audio 2 segments; existing 'audio' rows (Audio 1 subtitles) stay as they are.
+        $validated['type'] = 'audio2';
 
         DB::transaction(function () use ($validated, $categoryId) {
             // The form numbers positions 1..N from the rendered list, so seq
@@ -544,22 +547,44 @@ class TopicController extends Controller
             ->get();
 
         // Fetched in one go rather than per row — this used to issue a query
-        // for every content item on the page.
-        $subtitles = AudioSubtitle::with('audio')
-            ->whereIn('id', $contents->pluck('id_header')->filter()->all())
+        // for every content item on the page. Legacy rows ('audio') link to
+        // Audio 1 subtitles, new rows ('audio2') to Audio 2 segments.
+        $subtitles = AudioSubtitle::with('audio:id,title')
+            ->whereIn('id', $contents->where('type', '!=', 'audio2')->pluck('id_header')->filter()->all())
             ->get()
+            ->keyBy('id');
+
+        $segments = Audio2Segment::with('audio:id,title')
+            ->whereIn('id', $contents->where('type', 'audio2')->pluck('id_header')->filter()->all())
+            ->get(['id', 'audio2_id', 'title', 'timestamp'])
             ->keyBy('id');
 
         $items = [];
         foreach ($contents as $content) {
+            if ($content->type === 'audio2') {
+                $segment = $segments->get($content->id_header);
+                if (! $segment) {
+                    continue;
+                }
+
+                $formattedTime = self::formatSeconds($segment->timestamp);
+                $items[] = [
+                    'id' => $content->id,
+                    'type' => 'audio2',
+                    'title' => $segment->title ?: ($segment->audio->title ?? 'Untitled'),
+                    'waktu' => $formattedTime,
+                    'timestamp' => $formattedTime,
+                    'source' => $segment->audio->title ?? 'Unknown',
+                    'seq' => $content->seq,
+                    'content' => ['audio2_id' => $segment->audio2_id],
+                ];
+
+                continue;
+            }
+
             $subtitle = $subtitles->get($content->id_header);
             if ($subtitle) {
-                // Convert timestamp from seconds to HH:MM:SS format
-                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
-                $hours = floor($totalSeconds / 3600);
-                $minutes = floor(($totalSeconds % 3600) / 60);
-                $seconds = $totalSeconds % 60;
-                $formattedTime = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+                $formattedTime = self::formatSeconds($subtitle->timestamp);
 
                 // Use subtitle title if available, otherwise use audio title
                 $displayTitle = $subtitle->title ?: ($subtitle->audio ? $subtitle->audio->title : 'Untitled');
@@ -585,50 +610,69 @@ class TopicController extends Controller
             // picker asks for it. Sending every audio_subtitle row up front
             // meant ~160 MB and a 5 MB payload on a table of ~18k rows, which
             // exhausted PHP's memory limit before Laravel could render at all.
-            'availableItems' => Inertia::optional(fn () => $this->availableSubtitles($request)),
+            'availableItems' => Inertia::optional(fn () => $this->availableSegments($request)),
             'availableFilters' => [
                 'search' => trim((string) $request->string('item_search')),
+                'category' => $request->integer('item_category') ?: null,
             ],
+            'audio2Categories' => Audio2Category::query()->orderBy('seq')->orderBy('id')->get(['id', 'title']),
         ]);
     }
 
     /**
-     * Searchable, paginated pool of audio subtitles for the item picker.
+     * Searchable, paginated pool of Audio 2 segments for the item picker (Audio 1 is no longer offered).
+     * A search of "code mm:ss" matches that exact segment; anything else matches segment or episode titles.
      */
-    private function availableSubtitles(Request $request)
+    private function availableSegments(Request $request)
     {
         $search = trim((string) $request->string('item_search'));
+        $categoryId = $request->integer('item_category');
+        $codeTime = preg_match('/^(\S+)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/', $search, $m)
+            ? [$m[1], Audio2Controller::timeToSeconds($m[2])]
+            : null;
 
-        return AudioSubtitle::query()
-            ->with('audio:id,title')
-            ->when($search !== '', function ($query) use ($search): void {
+        return Audio2Segment::query()
+            ->select('audio2_segment.id', 'audio2_segment.audio2_id', 'audio2_segment.title', 'audio2_segment.timestamp', 'audio2.title as episode_title')
+            ->join('audio2', 'audio2.id', '=', 'audio2_segment.audio2_id')
+            ->when($categoryId > 0, fn ($query) => $query->where('audio2.audio2_category_id', $categoryId))
+            ->when($search !== '' && $codeTime !== null, function ($query) use ($codeTime): void {
+                // "Shuohua20110401 11:43", copied from a transcript header, jumps straight to that segment.
+                [$code, $seconds] = $codeTime;
+                $query->where('audio2_segment.timestamp', $seconds)
+                    ->where(fn ($q) => $q->where('audio2_segment.code', $code)->orWhere('audio2.title', $code));
+            })
+            ->when($search !== '' && $codeTime === null, function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
-                    $q->where('title', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%")
-                        ->orWhereHas('audio', fn ($a) => $a->where('title', 'like', "%{$search}%"));
+                    $q->where('audio2_segment.title', 'like', "%{$search}%")
+                        ->orWhere('audio2.title', 'like', "%{$search}%");
                 });
             })
-            ->orderBy('audio_id')
-            ->orderBy('timestamp')
-            ->paginate(20, ['id', 'audio_id', 'title', 'description', 'timestamp'], 'item_page')
+            ->orderByDesc('audio2.year')
+            ->orderByDesc('audio2.month')
+            ->orderBy('audio2.seq')
+            ->orderBy('audio2.id')
+            ->orderBy('audio2_segment.seq')
+            ->orderBy('audio2_segment.id')
+            ->paginate(20, ['*'], 'item_page')
             ->withQueryString()
-            ->through(function (AudioSubtitle $subtitle): array {
-                $totalSeconds = is_numeric($subtitle->timestamp) ? (int) $subtitle->timestamp : 0;
+            ->through(fn (Audio2Segment $segment): array => [
+                'id' => $segment->id,
+                'type' => 'audio2',
+                'title' => $segment->title ?: $segment->episode_title,
+                'timestamp' => self::formatSeconds($segment->timestamp),
+                'description' => '',
+                'source' => $segment->episode_title,
+                'audio2_id' => $segment->audio2_id,
+            ]);
+    }
 
-                return [
-                    'id' => $subtitle->id,
-                    'type' => 'audio',
-                    'title' => $subtitle->title ?: ($subtitle->audio->title ?? 'Untitled'),
-                    'timestamp' => sprintf(
-                        '%02d:%02d:%02d',
-                        floor($totalSeconds / 3600),
-                        floor(($totalSeconds % 3600) / 60),
-                        $totalSeconds % 60
-                    ),
-                    'description' => $subtitle->description ?? '',
-                    'source' => $subtitle->audio->title ?? 'Unknown',
-                    'audio_id' => $subtitle->audio_id,
-                ];
-            });
+    /**
+     * 69 → "00:01:09". Non-numeric legacy values count as 0.
+     */
+    private static function formatSeconds(mixed $value): string
+    {
+        $totalSeconds = is_numeric($value) ? (int) $value : 0;
+
+        return sprintf('%02d:%02d:%02d', intdiv($totalSeconds, 3600), intdiv($totalSeconds % 3600, 60), $totalSeconds % 60);
     }
 }
